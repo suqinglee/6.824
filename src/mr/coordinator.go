@@ -1,15 +1,23 @@
 package mr
 
-import "log"
-import "net"
-import "os"
-import "net/rpc"
-import "net/http"
+import (
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+	"os"
+	"time"
 
+	"6.824/models"
+)
 
 type Coordinator struct {
 	// Your definitions here.
-
+	Tasks    chan models.Task
+	InMap    map[int]bool
+	InReduce map[int]bool
+	DoneMap int
+	DoneReduce int
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -19,11 +27,28 @@ type Coordinator struct {
 //
 // the RPC argument and reply types are defined in rpc.go.
 //
-func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
+func (c *Coordinator) AskTask(args *Args, reply *Reply) error {
+	var ok bool
+	if reply.TaskInfo, ok = <-c.Tasks; ok {
+		reply.TaskInfo.StartTime = time.Now().Unix()
+		c.InMap[reply.TaskInfo.X] = true
+	} else {
+		reply.TaskInfo.Type = models.DONE
+	}
 	return nil
 }
 
+func (c *Coordinator) SubmitTask(args *Args, reply *Reply) error {
+	if args.TaskInfo.Type == models. {
+		c.Tasks <- models.Task{
+			FileName: args.TaskInfo,
+			X:        i,
+			M:        len(files),
+			R:        nReduce,
+			Type:     models.MAP,
+		}
+	}
+}
 
 //
 // start a thread that listens for RPCs from worker.go
@@ -50,7 +75,6 @@ func (c *Coordinator) Done() bool {
 
 	// Your code here.
 
-
 	return ret
 }
 
@@ -60,11 +84,22 @@ func (c *Coordinator) Done() bool {
 // nReduce is the number of reduce tasks to use.
 //
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	c := Coordinator{}
+	c := Coordinator{
+		Tasks: make(chan models.Task, len(files)),
+	}
 
 	// Your code here.
-
+	for i, file := range files {
+		c.Tasks <- models.Task{
+			FileName: file,
+			X:        i,
+			M:        len(files),
+			R:        nReduce,
+			Type:     models.MAP,
+		}
+	}
 
 	c.server()
+	close(c.Tasks)
 	return &c
 }
