@@ -40,20 +40,21 @@ func (c *Coordinator) AskTask(args *Args, reply *Reply) error {
 		}
 		switch reply.TaskInfo.Status {
 		case models.READY:
-			fmt.Println("ready...")
+			fmt.Printf("ready... type=%v xy=%v filename=%v\n", reply.TaskInfo.Type, reply.TaskInfo.XY, reply.TaskInfo.FileName)
 			reply.TaskInfo.StartTime = time.Now().Unix()
 			reply.TaskInfo.Status = models.DOING
 			reply.TaskInfo.Worker = args.TaskInfo.Worker
+			// c.Tasks <- reply.TaskInfo
 			goto end
 		case models.DOING:
-			fmt.Println("doing...")
+			fmt.Printf("doing... type=%v xy=%v filename=%v pid=%v\n", reply.TaskInfo.Type, reply.TaskInfo.XY, reply.TaskInfo.FileName, reply.TaskInfo.Worker)
 			if time.Now().Unix()-reply.TaskInfo.StartTime > 10 {
 				reply.TaskInfo.Status = models.READY
 				c.Tasks <- reply.TaskInfo
 				c.DeadWorker[reply.TaskInfo.Worker] = true
 			}
 		case models.DONE:
-			fmt.Println("done...")
+			fmt.Printf("done... type=%v xy=%v filename=%v\n", reply.TaskInfo.Type, reply.TaskInfo.XY, reply.TaskInfo.FileName)
 			if reply.TaskInfo.Type == models.MAP {
 				c.M--
 				fmt.Printf("c.M = %v\n", c.M)
@@ -71,13 +72,13 @@ func (c *Coordinator) AskTask(args *Args, reply *Reply) error {
 				}
 			} else if reply.TaskInfo.Type == models.REDUCE {
 				c.R--
+				fmt.Printf("c.R = %v\n", c.R)
 				if c.R == 0 {
 					c.Tasks <- models.Task{
 						Type:   models.END,
 						Status: models.READY,
 					}
 					// close(c.Tasks)
-					goto end
 				}
 			}
 		default:
@@ -90,7 +91,9 @@ end:
 }
 
 func (c *Coordinator) SubmitTask(args *Args, reply *Reply) error {
-	fmt.Println("submit...")
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	fmt.Printf("submit... type=%v xy=%v filename=%v\n", args.TaskInfo.Type, args.TaskInfo.XY, args.TaskInfo.FileName)
 	if _, ok := c.DeadWorker[args.TaskInfo.Worker]; !ok {
 		args.TaskInfo.Status = models.DONE
 		c.Tasks <- args.TaskInfo
@@ -141,9 +144,10 @@ func (c *Coordinator) Done() bool {
 //
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{
-		M:     len(files),
-		R:     nReduce,
-		Tasks: make(chan models.Task, len(files)+nReduce),
+		M:          len(files),
+		R:          nReduce,
+		Tasks:      make(chan models.Task, len(files)+nReduce),
+		DeadWorker: make(map[int]bool),
 	}
 
 	// Your code here.

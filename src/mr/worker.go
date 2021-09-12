@@ -74,9 +74,7 @@ func doMap(task *models.Task, mapf func(string, string) []KeyValue) {
 
 func doReduce(task *models.Task, reducef func(string, []string) string) {
 	kva := []KeyValue{}
-	fmt.Printf("test.M = %v\n", task.M)
 	for x := 0; x < task.M; x++ {
-		fmt.Printf("x = %v y = %v\n", x, task.XY)
 		intermediate, err := os.Open(fmt.Sprintf("mr-%v-%v", x, task.XY))
 		if err != nil {
 			log.Fatalf("doReduce %v", err)
