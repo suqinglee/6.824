@@ -19,11 +19,11 @@ import (
 //
 
 type Args struct {
-	TaskInfo models.Task
+	models.Task
 }
 
 type Reply struct {
-	TaskInfo models.Task
+	models.Task
 }
 
 // Add your RPC definitions here.

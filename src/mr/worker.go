@@ -39,30 +39,35 @@ func (a ByKey) Len() int           { return len(a) }
 func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
-func doMap(task *models.Task, mapf func(string, string) []KeyValue) {
-	file, err := os.Open(task.FileName)
-	if err != nil {
-		log.Fatalf("doMap %v", err)
-	}
-	content, err := ioutil.ReadAll(file)
-	if err != nil {
-		log.Fatalf("doMap %v", err)
-	}
-	file.Close()
-
-	kva := mapf(task.FileName, string(content))
-
+func doMap(task *models.Task, mapf func(string, string) []KeyValue) (err error) {
 	intermediates := make([]*os.File, task.R)
 	encs := make([]*json.Encoder, task.R)
 	for y := 0; y < task.R; y++ {
 		intermediates[y], err = ioutil.TempFile("./", fmt.Sprintf("tmp_mr-%v-%v", task.XY, y))
+		if err != nil {
+			log.Fatalf("create tempfile fail.")
+		}
 		encs[y] = json.NewEncoder(intermediates[y])
 	}
 
-	for _, kv := range kva {
-		y := ihash(kv.Key) % task.R
-		if encs[y].Encode(&kv) != nil {
+	for _, filename := range task.Files {
+		file, err := os.Open(filename)
+		if err != nil {
 			log.Fatalf("doMap %v", err)
+		}
+		content, err := ioutil.ReadAll(file)
+		if err != nil {
+			log.Fatalf("doMap %v", err)
+		}
+		file.Close()
+
+		kva := mapf(filename, string(content))
+
+		for _, kv := range kva {
+			y := ihash(kv.Key) % task.R
+			if encs[y].Encode(&kv) != nil {
+				log.Fatalf("doMap %v", err)
+			}
 		}
 	}
 
@@ -70,12 +75,13 @@ func doMap(task *models.Task, mapf func(string, string) []KeyValue) {
 		os.Rename(intermediates[y].Name(), fmt.Sprintf("mr-%v-%v", task.XY, y))
 		intermediates[y].Close()
 	}
+	return nil
 }
 
-func doReduce(task *models.Task, reducef func(string, []string) string) {
+func doReduce(task *models.Task, reducef func(string, []string) string) (err error) {
 	kva := []KeyValue{}
-	for x := 0; x < task.M; x++ {
-		intermediate, err := os.Open(fmt.Sprintf("mr-%v-%v", x, task.XY))
+	for _, filename := range task.Files {
+		intermediate, err := os.Open(filename)
 		if err != nil {
 			log.Fatalf("doReduce %v", err)
 		}
@@ -113,6 +119,8 @@ func doReduce(task *models.Task, reducef func(string, []string) string) {
 	}
 	os.Rename(file.Name(), fmt.Sprintf("mr-out-%v", task.XY))
 	file.Close()
+
+	return nil
 }
 
 //
@@ -125,25 +133,21 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	// uncomment to send the Example RPC to the coordinator.
 	for {
-		fmt.Println("ask")
 		task := AskTask()
 		switch task.Type {
 		case models.MAP:
-			fmt.Println("get map")
+			fmt.Printf("get map task %v\n", task.XY)
 			doMap(&task, mapf)
 		case models.REDUCE:
-			fmt.Println("get reduce")
+			fmt.Printf("get reduce task %v\n", task.XY)
 			doReduce(&task, reducef)
 		case models.END:
-			fmt.Println("get end")
 			return
 		default:
 			log.Fatalf("unknown task type")
 		}
 		SubmitTask(task)
-		fmt.Println("submit")
 	}
-
 }
 
 //
@@ -155,7 +159,7 @@ func AskTask() models.Task {
 
 	// declare an argument structure.
 	args := Args{
-		TaskInfo: models.Task{
+		models.Task{
 			Worker: os.Getpid(),
 		},
 	}
@@ -163,11 +167,11 @@ func AskTask() models.Task {
 	// send the RPC request, wait for the reply.
 	reply := Reply{}
 	call("Coordinator.AskTask", &args, &reply)
-	return reply.TaskInfo
+	return reply.Task
 }
 
 func SubmitTask(task models.Task) {
-	call("Coordinator.SubmitTask", &Args{TaskInfo: task}, nil)
+	call("Coordinator.SubmitTask", &Args{task}, nil)
 }
 
 //
