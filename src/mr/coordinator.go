@@ -31,15 +31,15 @@ type Coordinator struct {
 func (c *Coordinator) AskTask(args *Args, reply *Reply) error {
 	var ok bool
 	if reply.Task, ok = <-c.Tasks; !ok {
-		fmt.Println("channel closed.")
+		// fmt.Println("channel closed.")
 		reply.Type = models.END
 	} else {
 		if reply.Type == models.REDUCE {
-			fmt.Println("wait map done ...")
+			// fmt.Println("wait map done ...")
 			c.mwg.Wait()
-			fmt.Printf("alloc reduce task %v.\n", reply.XY)
+			// fmt.Printf("alloc reduce task %v.\n", reply.XY)
 		} else {
-			fmt.Printf("alloc map task %v.\n", reply.XY)
+			// fmt.Printf("alloc map task %v.\n", reply.XY)
 		}
 	}
 	return nil
@@ -47,10 +47,10 @@ func (c *Coordinator) AskTask(args *Args, reply *Reply) error {
 
 func (c *Coordinator) SubmitTask(args *Args, reply *Reply) error {
 	if args.Type == models.MAP {
-		fmt.Printf("submit map task %v\n", args.XY)
+		// fmt.Printf("submit map task %v\n", args.XY)
 		c.mwg.Done()
 	} else if args.Type == models.REDUCE {
-		fmt.Printf("submit reduce task %v\n", args.XY)
+		// fmt.Printf("submit reduce task %v\n", args.XY)
 		c.rwg.Done()
 	} else {
 		log.Fatalf("unknown args type %v.", args.Type)
@@ -62,7 +62,6 @@ func (c *Coordinator) SubmitTask(args *Args, reply *Reply) error {
 // start a thread that listens for RPCs from worker.go
 //
 func (c *Coordinator) server() {
-	fmt.Println("server ...")
 	rpc.Register(c)
 	rpc.HandleHTTP()
 	//l, e := net.Listen("tcp", ":1234")
@@ -81,10 +80,10 @@ func (c *Coordinator) server() {
 //
 func (c *Coordinator) Done() bool {
 	// Your code here.
-	fmt.Println("done?")
+	// fmt.Println("done?")
 	c.rwg.Wait()
 	close(c.Tasks)
-	fmt.Println("done!")
+	// fmt.Println("done!")
 	return true
 }
 

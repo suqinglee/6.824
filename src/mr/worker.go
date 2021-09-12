@@ -136,10 +136,10 @@ func Worker(mapf func(string, string) []KeyValue,
 		task := AskTask()
 		switch task.Type {
 		case models.MAP:
-			fmt.Printf("get map task %v\n", task.XY)
+			// fmt.Printf("get map task %v\n", task.XY)
 			doMap(&task, mapf)
 		case models.REDUCE:
-			fmt.Printf("get reduce task %v\n", task.XY)
+			// fmt.Printf("get reduce task %v\n", task.XY)
 			doReduce(&task, reducef)
 		case models.END:
 			return
