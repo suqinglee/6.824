@@ -125,18 +125,23 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	// uncomment to send the Example RPC to the coordinator.
 	for {
+		fmt.Println("ask")
 		task := AskTask()
 		switch task.Type {
 		case models.MAP:
+			fmt.Println("get map")
 			doMap(&task, mapf)
 		case models.REDUCE:
+			fmt.Println("get reduce")
 			doReduce(&task, reducef)
 		case models.END:
+			fmt.Println("get end")
 			return
 		default:
 			log.Fatalf("unknown task type")
 		}
 		SubmitTask(task)
+		fmt.Println("submit")
 	}
 
 }

@@ -15,11 +15,11 @@ import (
 
 type Coordinator struct {
 	// Your definitions here.
-	mutex      sync.Mutex
-	M          int
-	R          int
-	Tasks      chan models.Task
-	DeadWorker map[int]bool
+	mutex  sync.Mutex
+	M      int
+	R      int
+	Tasks  chan models.Task
+	Status map[string]int
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -30,37 +30,60 @@ type Coordinator struct {
 // the RPC argument and reply types are defined in rpc.go.
 //
 func (c *Coordinator) AskTask(args *Args, reply *Reply) error {
+	fmt.Println("ask task lock")
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	fmt.Println("ask task get lock")
 	for {
 		var ok bool
-		if reply.TaskInfo, ok = <-c.Tasks; !ok {
+		select {
+		case reply.TaskInfo, ok = <-c.Tasks:
+			if !ok {
+				reply.TaskInfo.Type = models.END
+				goto end
+			}
+		default:
 			fmt.Println("chan empty")
+			goto end
+		}
+		if reply.TaskInfo, ok = <-c.Tasks; !ok {
+			fmt.Printf("Worker %v quit\n", args.TaskInfo.Worker)
+			reply.TaskInfo.Type = models.END
 			goto end
 		}
 		switch reply.TaskInfo.Status {
 		case models.READY:
-			fmt.Printf("ready... type=%v xy=%v filename=%v\n", reply.TaskInfo.Type, reply.TaskInfo.XY, reply.TaskInfo.FileName)
+			fmt.Printf("ready... type=%v xy=%v pid=%v\n", reply.TaskInfo.Type, reply.TaskInfo.XY, args.TaskInfo.Worker)
 			reply.TaskInfo.StartTime = time.Now().Unix()
 			reply.TaskInfo.Status = models.DOING
 			reply.TaskInfo.Worker = args.TaskInfo.Worker
-			// c.Tasks <- reply.TaskInfo
+			c.Status[reply.TaskInfo.Unique()] = models.INPROGRESS
+			c.Tasks <- reply.TaskInfo
 			goto end
 		case models.DOING:
-			fmt.Printf("doing... type=%v xy=%v filename=%v pid=%v\n", reply.TaskInfo.Type, reply.TaskInfo.XY, reply.TaskInfo.FileName, reply.TaskInfo.Worker)
-			if time.Now().Unix()-reply.TaskInfo.StartTime > 10 {
-				reply.TaskInfo.Status = models.READY
-				c.Tasks <- reply.TaskInfo
-				c.DeadWorker[reply.TaskInfo.Worker] = true
+			fmt.Printf("doing... type=%v xy=%v pid=%v\n", reply.TaskInfo.Type, reply.TaskInfo.XY, reply.TaskInfo.Worker)
+			if a, ok := c.Status[reply.TaskInfo.Unique()]; ok {
+				fmt.Printf("exists %v\n", a)
+			} else {
+				fmt.Println("not exists")
 			}
+			if time.Now().Unix()-reply.TaskInfo.StartTime > 1000 && c.Status[reply.TaskInfo.Unique()] != models.FINISH {
+				fmt.Println("timeout")
+				c.Status[reply.TaskInfo.Unique()] = models.HANG
+				reply.TaskInfo.Status = models.READY
+				fmt.Println("redo")
+				c.Tasks <- reply.TaskInfo
+				fmt.Println("redo over")
+			}
+			fmt.Println("?????")
 		case models.DONE:
-			fmt.Printf("done... type=%v xy=%v filename=%v\n", reply.TaskInfo.Type, reply.TaskInfo.XY, reply.TaskInfo.FileName)
+			fmt.Printf("done... type=%v xy=%v pid=%v\n", reply.TaskInfo.Type, reply.TaskInfo.XY, reply.TaskInfo.Worker)
+			c.Status[reply.TaskInfo.Unique()] = models.FINISH
 			if reply.TaskInfo.Type == models.MAP {
 				c.M--
 				fmt.Printf("c.M = %v\n", c.M)
 				if c.M == 0 {
 					for i := 0; i < c.R; i++ {
-						fmt.Printf("i = %v\n", i)
 						c.Tasks <- models.Task{
 							XY:     i,
 							M:      reply.TaskInfo.M,
@@ -74,11 +97,7 @@ func (c *Coordinator) AskTask(args *Args, reply *Reply) error {
 				c.R--
 				fmt.Printf("c.R = %v\n", c.R)
 				if c.R == 0 {
-					c.Tasks <- models.Task{
-						Type:   models.END,
-						Status: models.READY,
-					}
-					// close(c.Tasks)
+					close(c.Tasks)
 				}
 			}
 		default:
@@ -87,19 +106,26 @@ func (c *Coordinator) AskTask(args *Args, reply *Reply) error {
 	}
 
 end:
+	fmt.Println("ask task unlock")
 	return nil
 }
 
 func (c *Coordinator) SubmitTask(args *Args, reply *Reply) error {
+	fmt.Println("submit task lock")
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	fmt.Printf("submit... type=%v xy=%v filename=%v\n", args.TaskInfo.Type, args.TaskInfo.XY, args.TaskInfo.FileName)
-	if _, ok := c.DeadWorker[args.TaskInfo.Worker]; !ok {
+	fmt.Println("submit task get lock")
+	fmt.Printf("submit... type=%v xy=%v pid=%v\n", args.TaskInfo.Type, args.TaskInfo.XY, args.TaskInfo.Worker)
+	if c.Status[args.TaskInfo.Unique()] == models.INPROGRESS {
+		c.Status[args.TaskInfo.Unique()] = models.FINISH
 		args.TaskInfo.Status = models.DONE
 		c.Tasks <- args.TaskInfo
+	} else if c.Status[args.TaskInfo.Unique()] == models.HANG {
+		delete(c.Status, args.TaskInfo.Unique())
 	} else {
-		delete(c.DeadWorker, args.TaskInfo.Worker)
+		log.Fatalf("unknown status")
 	}
+	fmt.Println("submit task unlock")
 	return nil
 }
 
@@ -125,15 +151,18 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 //
 func (c *Coordinator) Done() bool {
+	fmt.Println("done lock")
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	fmt.Println("done get lock")
 	ret := false
 
 	// Your code here.
 	if c.M == 0 && c.R == 0 {
-		close(c.Tasks)
+		// close(c.Tasks)
 		ret = true
 	}
+	fmt.Println("done unlock")
 	return ret
 }
 
@@ -144,15 +173,14 @@ func (c *Coordinator) Done() bool {
 //
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{
-		M:          len(files),
-		R:          nReduce,
-		Tasks:      make(chan models.Task, len(files)+nReduce),
-		DeadWorker: make(map[int]bool),
+		M:      len(files),
+		R:      nReduce,
+		Tasks:  make(chan models.Task, len(files)+nReduce+50),
+		Status: make(map[string]int),
 	}
 
 	// Your code here.
 	for i, file := range files {
-		fmt.Println(i)
 		c.Tasks <- models.Task{
 			FileName: file,
 			XY:       i,

@@ -1,5 +1,7 @@
 package models
 
+import "fmt"
+
 type Task struct {
 	FileName  string
 	Worker    int // Worker's pid
@@ -11,12 +13,20 @@ type Task struct {
 	StartTime int64
 }
 
+func (t *Task) Unique() string {
+	return fmt.Sprintf("%v%v%06v", t.Type, t.XY, t.Worker)
+}
+
 const (
 	MAP    = 0
 	REDUCE = 1
-	END    = 3
+	END    = 2
 
-	READY = 4
-	DOING = 5
-	DONE  = 6
+	READY = 3
+	DOING = 4
+	DONE  = 5
+
+	INPROGRESS = 6
+	HANG       = 7
+	FINISH     = 8
 )
