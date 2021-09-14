@@ -72,7 +72,8 @@ func doMap(task *models.Task, mapf func(string, string) []KeyValue) (err error) 
 	}
 
 	for y := 0; y < task.R; y++ {
-		os.Rename(intermediates[y].Name(), fmt.Sprintf("mr-%v-%v", task.XY, y))
+		task.TempFiles = append(task.TempFiles, intermediates[y].Name())
+		// os.Rename(intermediates[y].Name(), fmt.Sprintf("mr-%v-%v", task.XY, y))
 		intermediates[y].Close()
 	}
 	return nil
@@ -117,7 +118,9 @@ func doReduce(task *models.Task, reducef func(string, []string) string) (err err
 
 		i = j
 	}
-	os.Rename(file.Name(), fmt.Sprintf("mr-out-%v", task.XY))
+
+	task.TempFiles = append(task.TempFiles, file.Name())
+	// os.Rename(file.Name(), fmt.Sprintf("mr-out-%v", task.XY))
 	file.Close()
 
 	return nil

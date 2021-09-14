@@ -1,19 +1,27 @@
 package models
 
-import "fmt"
+import (
+	"encoding/json"
+)
 
 type Task struct {
 	Files     []string
-	Worker    int // Worker's pid
-	XY        int // Map or Reduce task id
+	Worker    int
+	XY        int
 	M         int
 	R         int
-	Type      int // Map or Reduce
-	StartTime int64
+	Type      int
+	TempFiles []string `json:"-"`
 }
 
-func (t *Task) Unique() string {
-	return fmt.Sprintf("%v%v%06v", t.Type, t.XY, t.Worker)
+func (t *Task) ToString() string {
+	bytes, _ := json.Marshal(t)
+	return string(bytes)
+}
+
+func FromString(str string) (task Task) {
+	json.Unmarshal([]byte(str), &task)
+	return task
 }
 
 const (
