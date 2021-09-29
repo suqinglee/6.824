@@ -18,7 +18,8 @@ package raft
 //
 
 import (
-	"log"
+	"math/rand"
+
 	//	"bytes"
 	"sync"
 	"sync/atomic"
@@ -72,7 +73,7 @@ type Raft struct {
 	// state a Raft server must maintain.
 	currentTerm int
 	votedFor    int
-	log         []logEntry
+	log         []*logEntry
 	role        int
 
 	commitIndex int
@@ -81,6 +82,9 @@ type Raft struct {
 	// Only in leader
 	nextIndex  []int
 	matchIndex []int
+
+	// Only in follower
+	lastReceiveEntry time.Time
 }
 
 type logEntry struct {
@@ -158,6 +162,10 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
+	Term         int
+	CandidateId  int
+	LastLogIndex int
+	LastLogTerm  int
 }
 
 type AppendEntriesArgs struct {
@@ -175,6 +183,8 @@ type AppendEntriesArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
+	Term        int
+	VoteGranted bool
 }
 
 type AppendEntriesReply struct {
@@ -190,7 +200,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-
+	rf.lastReceiveEntry = time.Now()
 }
 
 //
@@ -279,32 +289,78 @@ func (rf *Raft) killed() bool {
 
 // The ticker go routine starts a new election if this peer hasn't received
 // heartsbeats recently.
-func (rf *Raft) ticker() {
-	for rf.killed() == false {
+func (rf *Raft) election() {
+	for !rf.killed() {
 
 		// Your code here to check if a leader election should
 		// be started and to randomize sleeping time using
 		// time.Sleep().
-		switch rf.role {
-		case Leader:
-			for i, _ := range rf.peers {
-				if i == rf.me {
-					continue
-				}
-				rf.sendAppendEntries(i, &AppendEntriesArgs{}, &AppendEntriesReply{})
-			}
-		case Candidate:
-			for i, _ := range rf.peers {
-				if i == rf.me {
-					continue
-				}
-				rf.sendRequestVote(i, &RequestVoteArgs{}, &RequestVoteReply{})
-			}
-		case Follower:
-		default:
-			log.Fatalln("Bad Role.")
+		time.Sleep(1 * time.Millisecond)
+
+		randomTimeout := time.Duration(200+rand.Intn(150)) * time.Millisecond
+		interval := time.Since(rf.lastReceiveEntry)
+
+		if rf.role != Follower || interval < randomTimeout {
+			continue
 		}
-		time.Sleep(time.Duration(100) * time.Millisecond)
+
+		func() {
+			rf.role = Candidate
+			rf.currentTerm++
+			rf.votedFor = rf.me
+			rf.lastReceiveEntry = time.Now()
+
+			args := RequestVoteArgs{
+				Term:        rf.currentTerm,
+				CandidateId: rf.me,
+			}
+
+			type voteResult struct {
+				peerId int
+				reply  *RequestVoteReply
+			}
+
+			voteCount := 1
+			maxTerm := rf.currentTerm
+			var wg sync.WaitGroup
+			var mutex sync.Mutex
+			for i := 0; i < len(rf.peers); i++ {
+				if i == rf.me {
+					continue
+				}
+				wg.Add(1)
+				go func(peerId int) {
+					reply := RequestVoteReply{}
+					if ok := rf.sendRequestVote(i, &args, &reply); ok {
+						mutex.Lock()
+						if reply.VoteGranted {
+							voteCount++
+						}
+						if reply.Term > maxTerm {
+							maxTerm = reply.Term
+						}
+						mutex.Unlock()
+						wg.Done()
+					}
+				}(i)
+			}
+
+			wg.Wait()
+
+			if rf.role != Candidate {
+				return
+			}
+			if maxTerm > rf.currentTerm {
+				rf.role = Follower
+				rf.currentTerm = maxTerm
+				rf.votedFor = -1
+				return
+			}
+			if voteCount > len(rf.peers)/2 {
+				rf.role = Leader
+				return
+			}
+		}()
 
 	}
 }
@@ -332,8 +388,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
+	rand.Seed(time.Now().UnixNano())
 	// start ticker goroutine to start elections
-	go rf.ticker()
+	go rf.election()
 
 	return rf
 }
