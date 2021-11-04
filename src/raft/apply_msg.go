@@ -31,6 +31,7 @@ func (rf *Raft) apply(applyCh chan ApplyMsg) {
 					Command:      rf.log[i].Command,
 					CommandIndex: i,
 				}
+				DPrintf("[%d]: apply index %d - 1", rf.me, i)
 			}
 			rf.lastApplied = rf.commitIndex
 		}()

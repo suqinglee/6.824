@@ -34,6 +34,7 @@ func (rf *Raft) toLeader() {
 		rf.nextIndex[i] = len(rf.log)
 		rf.matchIndex[i] = 0
 	}
+	DPrintf("[%d]: convert from [%s] to [%s], term [%d]", rf.me, rf.role, Leader, rf.currentTerm)
 }
 
 func (rf *Raft) toFollower(term int) {
@@ -146,6 +147,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.log = append(rf.log, LogEntry{Term: rf.currentTerm, Command: command})
 	rf.nextIndex[rf.me] = len(rf.log)
 	rf.matchIndex[rf.me] = rf.nextIndex[rf.me] - 1
+
+	DPrintf("[%d]: Start received command: index: %d, term: %d", rf.me, len(rf.log)-1, rf.currentTerm)
 
 	return len(rf.log) - 1, rf.currentTerm, true
 }

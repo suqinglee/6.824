@@ -70,6 +70,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.readPersist(persister.ReadRaftState())
 
 	go rf.ticker()
+	go rf.apply(applyCh)
 
 	return rf
 }

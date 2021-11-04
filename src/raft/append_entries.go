@@ -30,6 +30,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	DPrintf("[%d]: received append entry from [%d], args term: %d, LeaderCommit: %d, prevLogIndex: %d, prevLogTerm: %d, len(entry): %d",
+		rf.me, args.LeaderId, args.Term, args.LeaderCommit, args.PrevLogIndex, args.PrevLogTerm, len(args.Entries))
+
 	reply.Success = false
 
 	/* Rules for All Servers */
@@ -81,6 +84,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		if len(rf.log)-1 < rf.commitIndex {
 			rf.commitIndex = len(rf.log) - 1
 		}
+		DPrintf("[%d]: commit index [%d]", rf.me, rf.commitIndex)
 	}
 
 	reply.Success = true
@@ -103,7 +107,9 @@ func (rf *Raft) sync() {
 
 				next := rf.nextIndex[id]
 				if len(rf.peers)-1 < next {
-					DPrintf("sync: len(rf.peers) - 1 < next index, id = %v", rf.me)
+					// DPrintf("pong pong pong")
+				} else {
+					DPrintf("[%d]: len of log: %d, next index of [%d]: %d", rf.me, len(rf.log), id, rf.nextIndex[id])
 				}
 				/* Rules for Leaders
 				 * 3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex
@@ -137,6 +143,7 @@ func (rf *Raft) sync() {
 						majority := match[(len(rf.peers)-1)/2]
 						if majority > rf.commitIndex && rf.log[majority].Term == rf.currentTerm {
 							rf.commitIndex = majority
+							DPrintf("[%d]: commit index [%d]", rf.me, rf.commitIndex)
 						}
 					} else {
 						/* 2) If AppendEntries fails because of log inconsistency: decrement nextIndex and retry (5.3) */
