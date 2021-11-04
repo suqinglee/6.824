@@ -401,7 +401,7 @@ func (rf *Raft) elect() {
 			peer.Call("Raft.RequestVote", args, &reply)
 
 			rf.mu.Lock()
-			rf.mu.Unlock()
+			defer rf.mu.Unlock()
 
 			totalCount += 1
 			// If RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower (5.1)
