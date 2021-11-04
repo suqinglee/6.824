@@ -22,13 +22,18 @@ func (rf *Raft) syncInterval() time.Duration {
 }
 
 func (rf *Raft) electTimeout() time.Duration {
-	return time.Duration(200+rand.Int31n(150)) * time.Millisecond
+	return time.Duration(150+rand.Int31n(150)) * time.Millisecond
 }
 
 func (rf *Raft) toLeader() {
 	rf.role = Leader
 	rf.votedFor = -1
 	rf.lastRecv = time.Now()
+
+	for i := 0; i < len(rf.peers); i++ {
+		rf.nextIndex[i] = len(rf.log)
+		rf.matchIndex[i] = 0
+	}
 }
 
 func (rf *Raft) toFollower(term int) {
@@ -127,13 +132,22 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 // the leader.
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
-	isLeader := true
-
 	// Your code here (2B).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
-	return index, term, isLeader
+	if rf.role != Leader {
+		return -1, -1, false
+	}
+
+	/* Rules for Leader */
+	/* 2. If command received from client: append entry to local log, respond after entry applied to state machine (5.3) */
+
+	rf.log = append(rf.log, LogEntry{Term: rf.currentTerm, Command: command})
+	rf.nextIndex[rf.me] = len(rf.log)
+	rf.matchIndex[rf.me] = rf.nextIndex[rf.me] - 1
+
+	return len(rf.log) - 1, rf.currentTerm, true
 }
 
 //

@@ -7,23 +7,6 @@ import (
 	"6.824/labrpc"
 )
 
-type ApplyMsg struct {
-	CommandValid bool
-	Command      interface{}
-	CommandIndex int
-
-	// For 2D:
-	SnapshotValid bool
-	Snapshot      []byte
-	SnapshotTerm  int
-	SnapshotIndex int
-}
-
-type LogEntry struct {
-	Term    int
-	Command interface{}
-}
-
 type Role string
 
 const (
@@ -33,20 +16,20 @@ const (
 )
 
 type Raft struct {
-	mu           sync.Mutex
-	peers        []*labrpc.ClientEnd
-	persister    *Persister
-	me           int
-	dead         int32
-	lastRecv     time.Time
-	role         Role
-	currentTerm  int
-	votedFor     int
-	logs         []LogEntry
-	commitIndex  int
-	lastApplied  int
-	nextIndex    []int
-	matchedIndex []int
+	mu          sync.Mutex
+	peers       []*labrpc.ClientEnd
+	persister   *Persister
+	me          int
+	dead        int32
+	lastRecv    time.Time
+	role        Role
+	currentTerm int
+	votedFor    int
+	log         []LogEntry
+	commitIndex int
+	lastApplied int
+	nextIndex   []int
+	matchIndex  []int
 }
 
 func (rf *Raft) ticker() {
@@ -77,6 +60,12 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.currentTerm = 0
 	rf.votedFor = -1
 	rf.lastRecv = time.Unix(0, 0)
+
+	rf.log = append(rf.log, LogEntry{Term: 0})
+	rf.commitIndex = 0
+	rf.lastApplied = 0
+	rf.nextIndex = make([]int, len(rf.peers))
+	rf.matchIndex = make([]int, len(rf.peers))
 
 	rf.readPersist(persister.ReadRaftState())
 
