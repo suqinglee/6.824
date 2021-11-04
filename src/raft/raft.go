@@ -52,11 +52,16 @@ type Raft struct {
 func (rf *Raft) ticker() {
 	for !rf.killed() {
 		rf.mu.Lock()
+
+		/* Rules for Followers */
+		/* 2. If election timeout elapses without receiving AppendEntries RPC from current leader or granting vote to candidate: convert to candidate */
+		/* Rules for Candidates */
+		/* 4. If election timeout elapses: start new election */
 		if rf.role != Leader && time.Since(rf.lastRecv) > rf.electTimeout() {
 			rf.elect()
 		}
-		rf.mu.Unlock()
 
+		rf.mu.Unlock()
 		time.Sleep(10 * time.Millisecond)
 	}
 }

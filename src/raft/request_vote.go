@@ -23,25 +23,26 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	reply.Term = rf.currentTerm
 	reply.VoteGranted = false
 
-	/* 1. RequestVote RPC Implementation */
-	/* 2. Rules for All Servers */
-	// 2.1 If commitIndex > lastApplied: increment lastApplied, apply log[lastApplied] to state machine (5.3)
+	/* Rules for All Servers */
+	/* 1. If commitIndex > lastApplied: increment lastApplied, apply log[lastApplied] to state machine (5.3) */
 
-	// 1.1 Reply false if term < currentTerm (5.1)
-	if args.Term < rf.currentTerm {
-		return
-	}
-
-	// 2.2 If RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower (5.1)
+	/* Rules for All Servers */
+	/* 2. If RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower (5.1) */
 	if args.Term > rf.currentTerm {
 		rf.toFollower(args.Term)
 	}
 	reply.Term = rf.currentTerm
 
-	// 1.2 If votedFor is null or candidateId, and candidate's log is at least as up-to-date as receiver's log, grant vote (5.2 5.4)
+	/* RequestVote RPC Implementation */
+	/* 1. Reply false if term < currentTerm (5.1) */
+	if args.Term < rf.currentTerm {
+		return
+	}
+
+	/* RequestVote RPC Implementation */
+	/* 2. If votedFor is null or candidateId, and candidate's log is at least as up-to-date as receiver's log, grant vote (5.2 5.4) */
 	if rf.votedFor == -1 || rf.votedFor == args.CandidateId {
 		rf.votedFor = args.CandidateId
 		reply.VoteGranted = true
@@ -51,11 +52,18 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 }
 
 func (rf *Raft) elect() {
+	/* Rules for Candidates
+	 * 1. On conversion to candidate, start election:
+	 *    1) Increment currentTerm
+	 *    2) vote for self
+	 *    3) Reset election timer
+	 *    4) Send RequestVote RPCs to all other servers
+	 */
 	rf.toCandidate()
-	cond := sync.NewCond(&rf.mu)
 	voteCount := 1
 	totalCount := 1
 
+	cond := sync.NewCond(&rf.mu)
 	for id, peer := range rf.peers {
 		if id == rf.me {
 			continue
@@ -68,7 +76,8 @@ func (rf *Raft) elect() {
 			defer rf.mu.Unlock()
 
 			totalCount += 1
-			// If RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower (5.1)
+			/* Rule for All Servers */
+			/* 2. If RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower (5.1) */
 			if reply.Term > rf.currentTerm {
 				rf.toFollower(reply.Term)
 			} else if reply.VoteGranted {
@@ -86,8 +95,12 @@ func (rf *Raft) elect() {
 		for voteCount <= len(rf.peers)/2 && totalCount < len(rf.peers) && rf.role == Candidate {
 			cond.Wait()
 		}
+		/* Rules for Candidates */
+		/* 2. If votes received from majority of servers: become leader */
 		if voteCount > len(rf.peers)/2 && rf.role == Candidate {
 			rf.toLeader()
+			/* Rules for Leaders */
+			/* 1. Upon election: send inital empty AppendEntries RPCs (heartbeat) to each server; repeat during idle periods to prevent election timeouts (5.2) */
 			go rf.sync()
 		}
 	}()

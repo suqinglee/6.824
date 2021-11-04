@@ -27,8 +27,8 @@ func (rf *Raft) electTimeout() time.Duration {
 
 func (rf *Raft) toLeader() {
 	rf.role = Leader
+	rf.votedFor = -1
 	rf.lastRecv = time.Now()
-	go rf.sync()
 }
 
 func (rf *Raft) toFollower(term int) {
