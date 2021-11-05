@@ -23,8 +23,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	DPrintf("[%d]: received vote request from [%d]", rf.me, args.CandidateId)
-
+	rf.lastRecv = time.Now()
 	reply.VoteGranted = false
 
 	/* Rules for All Servers */
@@ -42,7 +41,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if args.Term < rf.currentTerm {
 		return
 	}
-	DPrintf("[%d]: term [%d], state [%s], vote for [%d]", rf.me, rf.currentTerm, rf.role, rf.votedFor)
 
 	/* RequestVote RPC Implementation */
 	/* 2. If votedFor is null or candidateId, and candidate's log is at least as up-to-date as receiver's log, grant vote (5.2 5.4) */
@@ -50,11 +48,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		if args.LastLogTerm > rf.log[len(rf.log)-1].Term || args.LastLogIndex >= len(rf.log)-1 && rf.log[len(rf.log)-1].Term == args.LastLogTerm {
 			rf.votedFor = args.CandidateId
 			reply.VoteGranted = true
-			DPrintf("[%d]: voted to [%d]", rf.me, args.CandidateId)
 		}
 	}
-
-	rf.lastRecv = time.Now()
 }
 
 func (rf *Raft) elect() {
@@ -74,7 +69,6 @@ func (rf *Raft) elect() {
 		if id == rf.me {
 			continue
 		}
-		DPrintf("[%d]: term: [%d], send request vote to: [%d]", rf.me, rf.currentTerm, id)
 		go func(peer *labrpc.ClientEnd, args *RequestVoteArgs) {
 			reply := RequestVoteReply{}
 			peer.Call("Raft.RequestVote", args, &reply)
