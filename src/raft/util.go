@@ -18,7 +18,7 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 }
 
 func (rf *Raft) syncInterval() time.Duration {
-	return 75 * time.Millisecond
+	return 100 * time.Millisecond
 }
 
 func (rf *Raft) electTimeout() time.Duration {
@@ -34,6 +34,7 @@ func (rf *Raft) toLeader() {
 		rf.nextIndex[i] = len(rf.log)
 		rf.matchIndex[i] = 0
 	}
+	DPrintf("[%v %v] to leader", rf.me, rf.currentTerm)
 }
 
 func (rf *Raft) toFollower(term int) {
@@ -41,6 +42,7 @@ func (rf *Raft) toFollower(term int) {
 	rf.currentTerm = term
 	rf.votedFor = -1
 	rf.lastRecv = time.Now()
+	DPrintf("[%v %v] to follower", rf.me, rf.currentTerm)
 }
 
 func (rf *Raft) toCandidate() {
@@ -48,6 +50,7 @@ func (rf *Raft) toCandidate() {
 	rf.currentTerm += 1
 	rf.votedFor = rf.me
 	rf.lastRecv = time.Now()
+	DPrintf("[%v %v] to candidate", rf.me, rf.currentTerm)
 }
 
 // return currentTerm and whether this server

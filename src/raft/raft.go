@@ -59,7 +59,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.role = Follower
 	rf.currentTerm = 0
 	rf.votedFor = -1
-	rf.lastRecv = time.Unix(0, 0)
+	rf.lastRecv = time.Now()
 
 	rf.log = append(rf.log, LogEntry{Term: 0})
 	rf.commitIndex = 0
