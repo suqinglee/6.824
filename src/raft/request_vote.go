@@ -50,6 +50,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 			reply.VoteGranted = true
 		}
 	}
+
+	rf.persist()
 }
 
 func (rf *Raft) elect() {
@@ -71,7 +73,10 @@ func (rf *Raft) elect() {
 		}
 		go func(peer *labrpc.ClientEnd, args *RequestVoteArgs) {
 			reply := RequestVoteReply{}
-			peer.Call("Raft.RequestVote", args, &reply)
+			ok := peer.Call("Raft.RequestVote", args, &reply)
+			if !ok {
+				return
+			}
 
 			rf.mu.Lock()
 			defer rf.mu.Unlock()
@@ -85,6 +90,7 @@ func (rf *Raft) elect() {
 				voteCount += 1
 			}
 
+			rf.persist()
 			cond.Broadcast()
 		}(peer, &RequestVoteArgs{
 			Term:         rf.currentTerm,
@@ -109,5 +115,6 @@ func (rf *Raft) elect() {
 			/* 1. Upon election: send inital empty AppendEntries RPCs (heartbeat) to each server; repeat during idle periods to prevent election timeouts (5.2) */
 			go rf.sync()
 		}
+		rf.persist()
 	}()
 }

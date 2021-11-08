@@ -24,6 +24,9 @@ type AppendEntriesArgs struct {
 type AppendEntriesReply struct {
 	Term    int
 	Success bool
+
+	ConflictIndex int
+	ConflictTerm  int
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
@@ -32,6 +35,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	rf.lastRecv = time.Now()
 	reply.Success = false
+	reply.ConflictIndex = len(rf.log)
+	reply.ConflictTerm = -1
 
 	/* Rules for All Servers */
 	/* 1. If commitIndex > lastApplied: increment lastApplied, apply log[lastApplied] to state machine (5.3) */
@@ -53,7 +58,20 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	/* AppendEntries RPC Implementation */
 	/* 2. Reply false if log doesn't contain an entry at pervLogIndex whose term matches pervLogTerm (5.3) */
-	if len(rf.log) <= args.PrevLogIndex || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+	// if len(rf.log) <= args.PrevLogIndex || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+	// 	return
+	// }
+	if len(rf.log) <= args.PrevLogIndex {
+		return
+	}
+	if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+		reply.ConflictTerm = rf.log[args.PrevLogIndex].Term
+		for i := 1; i <= args.PrevLogIndex; i++ {
+			if rf.log[i].Term == reply.ConflictTerm {
+				reply.ConflictIndex = i
+				break
+			}
+		}
 		return
 	}
 
@@ -84,6 +102,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		}
 	}
 
+	rf.persist()
 	reply.Success = true
 }
 
@@ -115,7 +134,10 @@ func (rf *Raft) sync() {
 				 */
 				go func(id int, peer *labrpc.ClientEnd, args *AppendEntriesArgs) {
 					reply := AppendEntriesReply{}
-					peer.Call("Raft.AppendEntries", args, &reply)
+					ok := peer.Call("Raft.AppendEntries", args, &reply)
+					if !ok {
+						return
+					}
 
 					rf.mu.Lock()
 					defer rf.mu.Unlock()
@@ -129,7 +151,9 @@ func (rf *Raft) sync() {
 
 					if reply.Success {
 						/* 1) If successful: update nextIndex and matchIndex for follower (5.3) */
-						rf.nextIndex[id] += len(args.Entries)
+						// rf.nextIndex[id] += len(args.Entries)
+						// rf.matchIndex[id] = rf.nextIndex[id] - 1
+						rf.nextIndex[id] = args.PrevLogIndex + len(args.Entries) + 1
 						rf.matchIndex[id] = rf.nextIndex[id] - 1
 
 						match := make([]int, len(rf.peers))
@@ -143,8 +167,29 @@ func (rf *Raft) sync() {
 						}
 					} else {
 						/* 2) If AppendEntries fails because of log inconsistency: decrement nextIndex and retry (5.3) */
-						if rf.nextIndex[id] > 1 {
-							rf.nextIndex[id] -= 1
+						// rf.nextIndex[id] = args.PrevLogIndex
+						// if reply.ConflictIndex != -1 {
+						// 	rf.nextIndex[id] = reply.ConflictIndex
+						// }
+						// if rf.nextIndex[id] < 1 {
+						// 	rf.nextIndex[id] = 1
+						// }
+
+						if reply.ConflictTerm == -1 {
+							rf.nextIndex[id] = reply.ConflictIndex
+						} else {
+							conflictIndex := -1
+							for i := args.PrevLogIndex; i > 0; i-- {
+								if rf.log[i].Term == reply.ConflictTerm {
+									conflictIndex = i
+									break
+								}
+							}
+							if conflictIndex != -1 {
+								rf.nextIndex[id] = conflictIndex + 1
+							} else {
+								rf.nextIndex[id] = reply.ConflictIndex
+							}
 						}
 					}
 				}(id, peer, &AppendEntriesArgs{
@@ -156,6 +201,7 @@ func (rf *Raft) sync() {
 					LeaderCommit: rf.commitIndex,
 				})
 			}
+			rf.persist()
 		}()
 		time.Sleep(rf.syncInterval())
 	}

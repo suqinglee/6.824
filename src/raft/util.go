@@ -1,10 +1,13 @@
 package raft
 
 import (
+	"bytes"
 	"log"
 	"math/rand"
 	"sync/atomic"
 	"time"
+
+	"6.824/labgob"
 )
 
 // Debugging
@@ -34,7 +37,7 @@ func (rf *Raft) toLeader() {
 		rf.nextIndex[i] = len(rf.log)
 		rf.matchIndex[i] = 0
 	}
-	DPrintf("[%v %v] to leader", rf.me, rf.currentTerm)
+	// DPrintf("[%v %v] to leader", rf.me, rf.currentTerm)
 }
 
 func (rf *Raft) toFollower(term int) {
@@ -42,7 +45,7 @@ func (rf *Raft) toFollower(term int) {
 	rf.currentTerm = term
 	rf.votedFor = -1
 	rf.lastRecv = time.Now()
-	DPrintf("[%v %v] to follower", rf.me, rf.currentTerm)
+	// DPrintf("[%v %v] to follower", rf.me, rf.currentTerm)
 }
 
 func (rf *Raft) toCandidate() {
@@ -50,7 +53,7 @@ func (rf *Raft) toCandidate() {
 	rf.currentTerm += 1
 	rf.votedFor = rf.me
 	rf.lastRecv = time.Now()
-	DPrintf("[%v %v] to candidate", rf.me, rf.currentTerm)
+	// DPrintf("[%v %v] to candidate", rf.me, rf.currentTerm)
 }
 
 // return currentTerm and whether this server
@@ -68,36 +71,39 @@ func (rf *Raft) GetState() (int, bool) {
 // see paper's Figure 2 for a description of what should be persistent.
 //
 func (rf *Raft) persist() {
-	// Your code here (2C).
-	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.log)
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
 //
 // restore previously persisted state.
 //
 func (rf *Raft) readPersist(data []byte) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		return
 	}
-	// Your code here (2C).
-	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var currentTerm int
+	var votedFor int
+	var log []LogEntry
+	if d.Decode(&currentTerm) != nil ||
+		d.Decode(&votedFor) != nil ||
+		d.Decode(&log) != nil {
+		// DPrintf("Decode error.")
+	} else {
+		rf.currentTerm = currentTerm
+		rf.votedFor = votedFor
+		rf.log = log
+	}
 }
 
 //
@@ -150,6 +156,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.nextIndex[rf.me] = len(rf.log)
 	rf.matchIndex[rf.me] = rf.nextIndex[rf.me] - 1
 
+	rf.persist()
 	return len(rf.log) - 1, rf.currentTerm, true
 }
 
