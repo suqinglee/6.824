@@ -34,7 +34,7 @@ func (rf *Raft) toLeader() {
 	rf.lastRecv = time.Now()
 
 	for i := 0; i < len(rf.peers); i++ {
-		rf.nextIndex[i] = len(rf.log)
+		rf.nextIndex[i] = rf.log.size()
 		rf.matchIndex[i] = 0
 	}
 	// DPrintf("[%v %v] to leader", rf.me, rf.currentTerm)
@@ -80,6 +80,16 @@ func (rf *Raft) persist() {
 	rf.persister.SaveRaftState(data)
 }
 
+// func (rf *Raft) persistSnapshot() {
+// 	w := new(bytes.Buffer)
+// 	e := labgob.NewEncoder(w)
+// 	e.Encode(rf.currentTerm)
+// 	e.Encode(rf.votedFor)
+// 	e.Encode(rf.log)
+// 	data := w.Bytes()
+// 	rf.persister.SaveStateAndSnapshot(data, rf.snapshot)
+// }
+
 //
 // restore previously persisted state.
 //
@@ -87,6 +97,7 @@ func (rf *Raft) readPersist(data []byte) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	// rf.snapshot = rf.persister.ReadSnapshot()
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		return
 	}
@@ -94,7 +105,7 @@ func (rf *Raft) readPersist(data []byte) {
 	d := labgob.NewDecoder(r)
 	var currentTerm int
 	var votedFor int
-	var log []LogEntry
+	var log Log
 	if d.Decode(&currentTerm) != nil ||
 		d.Decode(&votedFor) != nil ||
 		d.Decode(&log) != nil {
@@ -152,12 +163,12 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	/* Rules for Leader */
 	/* 2. If command received from client: append entry to local log, respond after entry applied to state machine (5.3) */
 
-	rf.log = append(rf.log, LogEntry{Term: rf.currentTerm, Command: command})
-	rf.nextIndex[rf.me] = len(rf.log)
+	rf.log.Entries = append(rf.log.Entries, LogEntry{Term: rf.currentTerm, Command: command})
+	rf.nextIndex[rf.me] = rf.log.size()
 	rf.matchIndex[rf.me] = rf.nextIndex[rf.me] - 1
 
 	rf.persist()
-	return len(rf.log) - 1, rf.currentTerm, true
+	return rf.log.size() - 1, rf.currentTerm, true
 }
 
 //

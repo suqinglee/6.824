@@ -7,11 +7,6 @@ import (
 	"6.824/labrpc"
 )
 
-type LogEntry struct {
-	Term    int
-	Command interface{}
-}
-
 type AppendEntriesArgs struct {
 	Term         int
 	LeaderId     int
@@ -35,7 +30,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	rf.lastRecv = time.Now()
 	reply.Success = false
-	reply.ConflictIndex = len(rf.log)
+	reply.ConflictIndex = rf.log.size()
 	reply.ConflictTerm = -1
 
 	/* Rules for All Servers */
@@ -58,16 +53,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	/* AppendEntries RPC Implementation */
 	/* 2. Reply false if log doesn't contain an entry at pervLogIndex whose term matches pervLogTerm (5.3) */
-	// if len(rf.log) <= args.PrevLogIndex || rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
-	// 	return
-	// }
-	if len(rf.log) <= args.PrevLogIndex {
+	if rf.log.size() <= args.PrevLogIndex {
 		return
 	}
-	if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
-		reply.ConflictTerm = rf.log[args.PrevLogIndex].Term
+	if rf.log.get(args.PrevLogIndex).Term != args.PrevLogTerm {
+		reply.ConflictTerm = rf.log.get(args.PrevLogIndex).Term
 		for i := 1; i <= args.PrevLogIndex; i++ {
-			if rf.log[i].Term == reply.ConflictTerm {
+			if rf.log.get(i).Term == reply.ConflictTerm {
 				reply.ConflictIndex = i
 				break
 			}
@@ -77,18 +69,19 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	for i, e := range args.Entries {
 		j := args.PrevLogIndex + i + 1
-		if j >= len(rf.log) {
+		if j >= rf.log.size() {
 			/* AppendEntries RPC Implementation */
 			/* 4. Append any new entries not already in the log */
-			rf.log = append(rf.log, e)
+			// rf.log = append(rf.log, e)
+			rf.log.Entries = append(rf.log.Entries, e)
 		} else {
 			/* AppendEntries RPC Implementation */
 			/* 3. If an existing entry conficts with a new one (same index but different terms), delete the existing entry and all that follow it (5.3) */
-			if rf.log[j].Term != e.Term {
-				rf.log = rf.log[:j]
-				rf.log = append(rf.log, e)
+			if rf.log.get(j).Term != e.Term {
+				rf.log.Entries = rf.log.Entries[:j-rf.log.Base]
+				rf.log.Entries = append(rf.log.Entries, e)
 			} else {
-				rf.log[j] = e
+				rf.log.set(j, e)
 			}
 		}
 	}
@@ -97,8 +90,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	/* 5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry) */
 	if args.LeaderCommit > rf.commitIndex {
 		rf.commitIndex = args.LeaderCommit
-		if len(rf.log)-1 < rf.commitIndex {
-			rf.commitIndex = len(rf.log) - 1
+		if rf.log.size()-1 < rf.commitIndex {
+			rf.commitIndex = rf.log.size() - 1
 		}
 	}
 
@@ -123,9 +116,9 @@ func (rf *Raft) sync() {
 				next := rf.nextIndex[id]
 				entries := make([]LogEntry, 0)
 				prevLogTerm := 0
-				if next-1 < len(rf.log) {
-					prevLogTerm = rf.log[next-1].Term
-					entries = rf.log[next:]
+				if next-1 < rf.log.size() {
+					prevLogTerm = rf.log.get(next - 1).Term
+					entries = rf.log.Entries[next-rf.log.Base:]
 				}
 				/* Rules for Leaders
 				 * 3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex
@@ -162,25 +155,17 @@ func (rf *Raft) sync() {
 						/* Rule for Leaders */
 						/* 4. If there exists an N such that N > commitIndex, a majority of matchIndex[i] >= N, and log[N].Term == currentTerm: set commitIndex = N (5.3, 5.4) */
 						majority := match[(len(rf.peers)-1)/2]
-						if majority > rf.commitIndex && rf.log[majority].Term == rf.currentTerm {
+						if majority > rf.commitIndex && rf.log.get(majority).Term == rf.currentTerm {
 							rf.commitIndex = majority
 						}
 					} else {
 						/* 2) If AppendEntries fails because of log inconsistency: decrement nextIndex and retry (5.3) */
-						// rf.nextIndex[id] = args.PrevLogIndex
-						// if reply.ConflictIndex != -1 {
-						// 	rf.nextIndex[id] = reply.ConflictIndex
-						// }
-						// if rf.nextIndex[id] < 1 {
-						// 	rf.nextIndex[id] = 1
-						// }
-
 						if reply.ConflictTerm == -1 {
 							rf.nextIndex[id] = reply.ConflictIndex
 						} else {
 							conflictIndex := -1
 							for i := args.PrevLogIndex; i > 0; i-- {
-								if rf.log[i].Term == reply.ConflictTerm {
+								if rf.log.get(i).Term == reply.ConflictTerm {
 									conflictIndex = i
 									break
 								}

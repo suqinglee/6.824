@@ -14,7 +14,7 @@ type ApplyMsg struct {
 	SnapshotIndex int
 }
 
-func (rf *Raft) apply(applyCh chan ApplyMsg) {
+func (rf *Raft) apply() {
 	for !rf.killed() {
 		func() {
 			rf.mu.Lock()
@@ -26,9 +26,9 @@ func (rf *Raft) apply(applyCh chan ApplyMsg) {
 			/* Rules for All Servers */
 			/* 1. If commitIndex > lastApplied: increment lastApplied, apply log[lastApplied] to state machine (5.3) */
 			for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
-				applyCh <- ApplyMsg{
+				rf.applyCh <- ApplyMsg{
 					CommandValid: true,
-					Command:      rf.log[i].Command,
+					Command:      rf.log.get(i).Command,
 					CommandIndex: i,
 				}
 			}

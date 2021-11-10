@@ -25,11 +25,13 @@ type Raft struct {
 	role        Role
 	currentTerm int
 	votedFor    int
-	log         []LogEntry
+	log         Log
 	commitIndex int
 	lastApplied int
 	nextIndex   []int
 	matchIndex  []int
+	applyCh     chan ApplyMsg
+	// snapshot    []byte
 }
 
 func (rf *Raft) ticker() {
@@ -61,16 +63,19 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.votedFor = -1
 	rf.lastRecv = time.Now()
 
-	rf.log = append(rf.log, LogEntry{Term: 0})
+	rf.log.Entries = append(rf.log.Entries, LogEntry{Term: 0})
+	rf.log.Base = 0
 	rf.commitIndex = 0
 	rf.lastApplied = 0
 	rf.nextIndex = make([]int, len(rf.peers))
 	rf.matchIndex = make([]int, len(rf.peers))
 
+	rf.applyCh = applyCh
+
 	rf.readPersist(persister.ReadRaftState())
 
 	go rf.ticker()
-	go rf.apply(applyCh)
+	go rf.apply()
 
 	return rf
 }

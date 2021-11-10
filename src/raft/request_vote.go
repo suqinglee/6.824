@@ -45,7 +45,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	/* RequestVote RPC Implementation */
 	/* 2. If votedFor is null or candidateId, and candidate's log is at least as up-to-date as receiver's log, grant vote (5.2 5.4) */
 	if rf.votedFor == -1 || rf.votedFor == args.CandidateId {
-		if args.LastLogTerm > rf.log[len(rf.log)-1].Term || args.LastLogIndex >= len(rf.log)-1 && rf.log[len(rf.log)-1].Term == args.LastLogTerm {
+		if args.LastLogTerm > rf.log.get(rf.log.size()-1).Term || args.LastLogIndex >= rf.log.size()-1 && rf.log.get(rf.log.size()-1).Term == args.LastLogTerm {
 			rf.votedFor = args.CandidateId
 			reply.VoteGranted = true
 		}
@@ -95,8 +95,8 @@ func (rf *Raft) elect() {
 		}(peer, &RequestVoteArgs{
 			Term:         rf.currentTerm,
 			CandidateId:  rf.me,
-			LastLogIndex: len(rf.log) - 1,
-			LastLogTerm:  rf.log[len(rf.log)-1].Term,
+			LastLogIndex: rf.log.size() - 1,
+			LastLogTerm:  rf.log.get(rf.log.size() - 1).Term,
 		})
 	}
 
