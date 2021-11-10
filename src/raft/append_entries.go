@@ -120,6 +120,16 @@ func (rf *Raft) sync() {
 					prevLogTerm = rf.log.get(next - 1).Term
 					entries = rf.log.Entries[next-rf.log.Base:]
 				}
+				if next <= rf.log.Base {
+					go rf.sendSnapshot(id, peer, &InstallSnapshotArgs{
+						Term:              rf.currentTerm,
+						LeaderId:          rf.me,
+						LastIncludedIndex: rf.log.Base,
+						LastIncludedTerm:  rf.log.Entries[0].Term,
+						Data:              rf.snapshot,
+					})
+					continue
+				}
 				/* Rules for Leaders
 				 * 3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex
 				 *    1) If successful: update nextIndex and matchIndex for follower (5.3)

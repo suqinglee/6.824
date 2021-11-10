@@ -31,7 +31,7 @@ type Raft struct {
 	nextIndex   []int
 	matchIndex  []int
 	applyCh     chan ApplyMsg
-	// snapshot    []byte
+	snapshot    []byte
 }
 
 func (rf *Raft) ticker() {
@@ -73,6 +73,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.applyCh = applyCh
 
 	rf.readPersist(persister.ReadRaftState())
+	rf.snapshot = persister.ReadSnapshot()
+
+	rf.lastApplied = rf.log.Base
 
 	go rf.ticker()
 	go rf.apply()
