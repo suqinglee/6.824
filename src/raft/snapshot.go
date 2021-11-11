@@ -33,37 +33,19 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		return
 	}
 
-	rf.applyCh <- ApplyMsg{
+	msg := ApplyMsg{
 		SnapshotValid: true,
 		Snapshot:      args.Data,
 		SnapshotTerm:  args.LastIncludedTerm,
 		SnapshotIndex: args.LastIncludedIndex,
 	}
+
+	go func() {rf.applyCh <- msg}()
 }
 
-// func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
-// 	rf.mu.Lock()
-// 	defer rf.mu.Unlock()
-
-// 	if lastIncludedIndex <= rf.commitIndex || lastIncludedIndex >= rf.log.size() {
-// 		return false
-// 	}
-
-// 	rf.log.Entries = rf.log.Entries[lastIncludedIndex-rf.log.Base:]
-// 	rf.log.Base = lastIncludedIndex
-// 	rf.snapshot = snapshot
-// 	rf.commitIndex = lastIncludedIndex
-// 	rf.lastApplied = lastIncludedIndex
-// 	rf.persistSnapshot()
-// 	return true
-// }
-
 func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
-
-	// Your code here (2D).
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	DPrintf("%v cond install", rf.me)
 
 	if lastIncludedIndex <= rf.commitIndex {
 		return false

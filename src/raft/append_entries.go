@@ -71,7 +71,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
-	for i, e := range args.Entries {
+	for i := 0; i < len(args.Entries); i++ {
+	// for i, e := range args.Entries {
+		e := args.Entries[i]
 		j := args.PrevLogIndex + i + 1
 		if j >= rf.log.size() {
 			/* AppendEntries RPC Implementation */
