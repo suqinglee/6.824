@@ -41,27 +41,53 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	}
 }
 
+// func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
+// 	rf.mu.Lock()
+// 	defer rf.mu.Unlock()
+
+// 	if lastIncludedIndex <= rf.commitIndex || lastIncludedIndex >= rf.log.size() {
+// 		return false
+// 	}
+
+// 	rf.log.Entries = rf.log.Entries[lastIncludedIndex-rf.log.Base:]
+// 	rf.log.Base = lastIncludedIndex
+// 	rf.snapshot = snapshot
+// 	rf.commitIndex = lastIncludedIndex
+// 	rf.lastApplied = lastIncludedIndex
+// 	rf.persistSnapshot()
+// 	return true
+// }
+
 func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
+
+	// Your code here (2D).
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	DPrintf("%v cond install", rf.me)
 
 	if lastIncludedIndex <= rf.commitIndex {
 		return false
 	}
 
-	rf.log.Entries = rf.log.Entries[lastIncludedIndex-rf.log.Base:]
+	if lastIncludedIndex <= rf.log.size()-1 && rf.log.get(lastIncludedIndex).Term == lastIncludedTerm {
+		rf.log.Entries = append([]LogEntry(nil), rf.log.Entries[lastIncludedIndex-rf.log.Base:]...)
+	} else {
+		rf.log.Entries = append([]LogEntry(nil), LogEntry{Term: lastIncludedTerm})
+	}
+
 	rf.log.Base = lastIncludedIndex
 	rf.snapshot = snapshot
 	rf.commitIndex = lastIncludedIndex
 	rf.lastApplied = lastIncludedIndex
 	rf.persistSnapshot()
+
 	return true
 }
 
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-
+	DPrintf("%v snapshot", rf.me)
 	if index <= rf.log.Base {
 		return
 	}
@@ -77,6 +103,7 @@ func (rf *Raft) sendSnapshot(id int, peer *labrpc.ClientEnd, args *InstallSnapsh
 	if !ok {
 		return
 	}
+	DPrintf("%v send snapshot", rf.me)
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()

@@ -51,6 +51,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
+	if args.PrevLogIndex < rf.log.Base {
+		return
+	}
+
 	/* AppendEntries RPC Implementation */
 	/* 2. Reply false if log doesn't contain an entry at pervLogIndex whose term matches pervLogTerm (5.3) */
 	if rf.log.size() <= args.PrevLogIndex {
@@ -81,7 +85,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				rf.log.Entries = rf.log.Entries[:j-rf.log.Base]
 				rf.log.Entries = append(rf.log.Entries, e)
 			} else {
-				rf.log.set(j, e)
+				// rf.log.set(j, e)
+				rf.log.Entries[j-rf.log.Base] = e
 			}
 		}
 	}
@@ -114,12 +119,6 @@ func (rf *Raft) sync() {
 				}
 
 				next := rf.nextIndex[id]
-				entries := make([]LogEntry, 0)
-				prevLogTerm := 0
-				if next-1 < rf.log.size() {
-					prevLogTerm = rf.log.get(next - 1).Term
-					entries = rf.log.Entries[next-rf.log.Base:]
-				}
 				if next <= rf.log.Base {
 					go rf.sendSnapshot(id, peer, &InstallSnapshotArgs{
 						Term:              rf.currentTerm,
@@ -129,6 +128,12 @@ func (rf *Raft) sync() {
 						Data:              rf.snapshot,
 					})
 					continue
+				}
+				entries := make([]LogEntry, 0)
+				prevLogTerm := 0
+				if next-1 < rf.log.size() {
+					prevLogTerm = rf.log.get(next - 1).Term
+					entries = rf.log.Entries[next-rf.log.Base:]
 				}
 				/* Rules for Leaders
 				 * 3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex

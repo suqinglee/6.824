@@ -11,7 +11,7 @@ import (
 )
 
 // Debugging
-const Debug = true
+const Debug = false
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
 	if Debug {
@@ -21,11 +21,11 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 }
 
 func (rf *Raft) syncInterval() time.Duration {
-	return 100 * time.Millisecond
+	return 120 * time.Millisecond
 }
 
 func (rf *Raft) electTimeout() time.Duration {
-	return time.Duration(150+rand.Int31n(150)) * time.Millisecond
+	return time.Duration(150+rand.Int31n(200)) * time.Millisecond
 }
 
 func (rf *Raft) toLeader() {
@@ -89,6 +89,17 @@ func (rf *Raft) persistSnapshot() {
 	data := w.Bytes()
 	rf.persister.SaveStateAndSnapshot(data, rf.snapshot)
 }
+
+// func (rf *Raft) persistStateAndSnapshot(snapshot []byte) {
+// 	w := new(bytes.Buffer)
+// 	e := labgob.NewEncoder(w)
+// 	e.Encode(rf.currentTerm)
+// 	e.Encode(rf.votedFor)
+// 	e.Encode(rf.log)
+// 	data := w.Bytes()
+
+// 	rf.persister.SaveStateAndSnapshot(data, snapshot)
+// }
 
 //
 // restore previously persisted state.

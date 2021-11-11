@@ -18,6 +18,6 @@ func (l *Log) get(i int) LogEntry {
 	return l.Entries[i-l.Base]
 }
 
-func (l *Log) set(i int, e LogEntry) {
-	l.Entries[i-l.Base] = e
-}
+// func (l *Log) set(i int, e LogEntry) {
+// 	l.Entries[i-l.Base] = e
+// }

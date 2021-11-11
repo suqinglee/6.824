@@ -26,11 +26,13 @@ func (rf *Raft) apply() {
 			/* Rules for All Servers */
 			/* 1. If commitIndex > lastApplied: increment lastApplied, apply log[lastApplied] to state machine (5.3) */
 			for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+				rf.mu.Unlock()
 				rf.applyCh <- ApplyMsg{
 					CommandValid: true,
 					Command:      rf.log.get(i).Command,
 					CommandIndex: i,
 				}
+				rf.mu.Lock()
 			}
 			rf.lastApplied = rf.commitIndex
 		}()
