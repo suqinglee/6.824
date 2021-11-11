@@ -96,4 +96,5 @@ func (rf *Raft) sendSnapshot(id int, peer *labrpc.ClientEnd, args *InstallSnapsh
 	}
 
 	rf.nextIndex[id] = args.LastIncludedIndex + 1
+	rf.matchIndex[id] = args.LastIncludedIndex
 }

@@ -25,7 +25,7 @@ func (rf *Raft) syncInterval() time.Duration {
 }
 
 func (rf *Raft) electTimeout() time.Duration {
-	return time.Duration(150+rand.Int31n(200)) * time.Millisecond
+	return time.Duration(250+rand.Int31n(150)) * time.Millisecond
 }
 
 func (rf *Raft) toLeader() {

@@ -102,6 +102,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		}
 	}
 
+	rf.lastRecv = time.Now()
 	rf.persist()
 	reply.Success = true
 }
@@ -137,14 +138,22 @@ func (rf *Raft) sync() {
 					prevLogTerm = rf.log.get(next - 1).Term
 					entries = rf.log.Entries[next-rf.log.Base:]
 				}
+				args := AppendEntriesArgs{
+					Term:         rf.currentTerm,
+					LeaderId:     rf.me,
+					PrevLogIndex: next - 1,
+					PrevLogTerm:  prevLogTerm,
+					Entries:      entries,
+					LeaderCommit: rf.commitIndex,
+				}
 				/* Rules for Leaders
 				 * 3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex
 				 *    1) If successful: update nextIndex and matchIndex for follower (5.3)
 				 *    2) If AppendEntries fails because of log inconsistency: decrement nextIndex and retry (5.3)
 				 */
-				go func(id int, peer *labrpc.ClientEnd, args *AppendEntriesArgs) {
+				go func(id int, peer *labrpc.ClientEnd, args AppendEntriesArgs) {
 					reply := AppendEntriesReply{}
-					ok := peer.Call("Raft.AppendEntries", args, &reply)
+					ok := peer.Call("Raft.AppendEntries", &args, &reply)
 					if !ok {
 						return
 					}
@@ -194,14 +203,7 @@ func (rf *Raft) sync() {
 							}
 						}
 					}
-				}(id, peer, &AppendEntriesArgs{
-					Term:         rf.currentTerm,
-					LeaderId:     rf.me,
-					PrevLogIndex: next - 1,
-					PrevLogTerm:  prevLogTerm,
-					Entries:      entries,
-					LeaderCommit: rf.commitIndex,
-				})
+				}(id, peer, args)
 			}
 			rf.persist()
 		}()
