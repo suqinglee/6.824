@@ -10,7 +10,7 @@ import (
 	"6.824/raft"
 )
 
-const Debug = true
+const Debug = false
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
 	if Debug {
@@ -35,7 +35,9 @@ type KVServer struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
-	data map[string]string
+	data     map[string]string
+	opid     int
+	finished int
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
@@ -50,6 +52,13 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
+	kv.opid++
+	kv.finished++
+
+	for kv.opid > kv.finished {
+		reply.Err = ErrNoKey
+		return
+	}
 	reply.Value = kv.data[args.Key]
 	DPrintf("%v return key:%v val:%v", kv.me, args.Key, reply.Value)
 }
@@ -62,41 +71,39 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		Key:    args.Key,
 		Value:  args.Value,
 	}
-
 	_, _, isLeader := kv.rf.Start(op)
 	if !isLeader {
 		reply.Err = ErrWrongLeader
 		return
 	}
-	DPrintf("start %v %v %v", args.Op, args.Key, args.Value)
-
 	kv.mu.Lock()
-	defer kv.mu.Unlock()
+	kv.opid++
+	kv.mu.Unlock()
+	DPrintf("start %v %v %v", args.Op, args.Key, args.Value)
+}
 
-	msg := <-kv.applyCh
-	op = msg.Command.(Op)
-	if msg.CommandValid {
-		DPrintf("recv %v %v %v", op.Action, op.Key, op.Value)
-		if op.Action == "Put" {
-			kv.data[op.Key] = op.Value
-		} else if op.Action == "Append" {
-			kv.data[op.Key] += op.Value
+func (kv *KVServer) update() {
+	for !kv.killed() {
+		msg := <-kv.applyCh
+		op := msg.Command.(Op)
+		if msg.CommandValid {
+			kv.execute(op)
 		}
 	}
 }
 
-// func (kv *KVServer) Keep() {
-// 	for !kv.killed() {
-// 		msg := <-kv.applyCh
-// 		op := msg.Command.(Op)
-// 		if msg.CommandValid {
-// 			kv.mu.Lock()
-// 			DPrintf("recv %v %v %v", op.Action, op.Key, op.Value)
-// 			kv.data[op.Key] += op.Value
-// 			kv.mu.Unlock()
-// 		}
-// 	}
-// }
+func (kv *KVServer) execute(op Op) {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	DPrintf("exec %v %v", op.Action, op.Key)
+	if op.Action == "Put" {
+		kv.data[op.Key] = op.Value
+	} else if op.Action == "Append" {
+		kv.data[op.Key] += op.Value
+	}
+	kv.finished++
+}
 
 //
 // the tester calls Kill() when a KVServer instance won't
@@ -149,8 +156,10 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	// You may need initialization code here.
 	kv.data = make(map[string]string)
+	kv.opid = 0
+	kv.finished = 0
 
-	// go kv.Keep()
+	go kv.update()
 
 	return kv
 }
