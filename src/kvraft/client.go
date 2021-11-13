@@ -1,9 +1,13 @@
 package kvraft
 
 import (
-	"crypto/rand"
+	crand "crypto/rand"
 	"math/big"
+	mrand "math/rand"
+	"strconv"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"6.824/labrpc"
 )
@@ -13,11 +17,13 @@ type Clerk struct {
 	// You will have to modify this struct.
 	mu       sync.Mutex
 	leaderId int
+	cid      string
+	seq      int64
 }
 
 func nrand() int64 {
 	max := big.NewInt(int64(1) << 62)
-	bigx, _ := rand.Int(rand.Reader, max)
+	bigx, _ := crand.Int(crand.Reader, max)
 	x := bigx.Int64()
 	return x
 }
@@ -27,6 +33,8 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck.servers = servers
 	// You'll have to add code here.
 	ck.leaderId = 0
+	ck.cid = strconv.FormatInt(mrand.Int63(), 16) + strconv.FormatInt(time.Now().UnixNano(), 16)
+	ck.seq = 0
 	return ck
 }
 
@@ -45,16 +53,15 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 func (ck *Clerk) Get(key string) string {
 	args := GetArgs{
 		Key: key,
+		Cid: ck.cid,
+		Seq: atomic.LoadInt64(&ck.seq),
 	}
 	reply := GetReply{}
 
 	ck.mu.Lock()
 	defer ck.mu.Unlock()
 
-	// DPrintf("Get %v", key)
-
 	for {
-		// DPrintf("Get call %v", ck.leaderId)
 		ok := ck.servers[ck.leaderId].Call("KVServer.Get", &args, &reply)
 		if !ok || reply.Err != OK {
 			if reply.Err == ErrWrongLeader {
@@ -66,7 +73,7 @@ func (ck *Clerk) Get(key string) string {
 	}
 
 	// You will have to modify this function.
-	return ""
+	// return ""
 }
 
 //
@@ -85,6 +92,8 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		Key:   key,
 		Value: value,
 		Op:    op,
+		Cid:   ck.cid,
+		Seq:   atomic.AddInt64(&ck.seq, 1),
 	}
 	reply := PutAppendReply{}
 

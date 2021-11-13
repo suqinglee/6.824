@@ -23,6 +23,8 @@ type Op struct {
 	Action string
 	Key    string
 	Value  string
+	Cid    string
+	Seq    int64
 }
 
 type KVServer struct {
@@ -36,8 +38,9 @@ type KVServer struct {
 
 	// Your definitions here.
 	data     map[string]string
-	opid     int
-	finished int
+	applied  map[string]int64
+	opid     int64
+	finished int64
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
@@ -49,37 +52,41 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		return
 	}
 
+	// DPrintf("Get %v, seq=%v", args.Key, args.Seq)
+	// atomic.AddInt64(&kv.opid, 1)
+	// atomic.AddInt64(&kv.finished, 1)
+
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	kv.opid++
-	kv.finished++
-
+	// for args.Seq > kv.applied[args.Cid] {
 	for kv.opid > kv.finished {
 		reply.Err = ErrNoKey
 		return
 	}
 	reply.Value = kv.data[args.Key]
-	DPrintf("%v return key:%v val:%v", kv.me, args.Key, reply.Value)
+	DPrintf("return cid:%v seq:%v key:%v val:%v", args.Cid, args.Seq, args.Key, reply.Value)
 }
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
-	// Your code here.
 	reply.Err = OK
 	op := Op{
 		Action: args.Op,
 		Key:    args.Key,
 		Value:  args.Value,
+		Cid:    args.Cid,
+		Seq:    args.Seq,
 	}
 	_, _, isLeader := kv.rf.Start(op)
 	if !isLeader {
 		reply.Err = ErrWrongLeader
 		return
 	}
+
 	kv.mu.Lock()
 	kv.opid++
 	kv.mu.Unlock()
-	DPrintf("start %v %v %v", args.Op, args.Key, args.Value)
+	DPrintf("start %v %v %v, cid=%v, seq=%v", args.Op, args.Key, args.Value, args.Cid, args.Seq)
 }
 
 func (kv *KVServer) update() {
@@ -96,13 +103,19 @@ func (kv *KVServer) execute(op Op) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	DPrintf("exec %v %v", op.Action, op.Key)
+	if op.Seq <= kv.applied[op.Cid] {
+		return
+	}
+	kv.applied[op.Cid] = op.Seq
+	kv.finished++
+
+	DPrintf("exec %v %v %v %v %v", op.Action, op.Key, op.Cid, op.Seq, op.Value)
 	if op.Action == "Put" {
 		kv.data[op.Key] = op.Value
 	} else if op.Action == "Append" {
 		kv.data[op.Key] += op.Value
 	}
-	kv.finished++
+
 }
 
 //
@@ -156,6 +169,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	// You may need initialization code here.
 	kv.data = make(map[string]string)
+	kv.applied = make(map[string]int64)
 	kv.opid = 0
 	kv.finished = 0
 
