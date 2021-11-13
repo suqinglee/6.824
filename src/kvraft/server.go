@@ -1,15 +1,16 @@
 package kvraft
 
 import (
-	"6.824/labgob"
-	"6.824/labrpc"
-	"6.824/raft"
 	"log"
 	"sync"
 	"sync/atomic"
+
+	"6.824/labgob"
+	"6.824/labrpc"
+	"6.824/raft"
 )
 
-const Debug = false
+const Debug = true
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
 	if Debug {
@@ -18,11 +19,10 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 	return
 }
 
-
 type Op struct {
-	// Your definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+	Action string
+	Key    string
+	Value  string
 }
 
 type KVServer struct {
@@ -35,16 +35,68 @@ type KVServer struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
+	data map[string]string
 }
-
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
+	reply.Err = OK
+	_, isLeader := kv.rf.GetState()
+	if !isLeader {
+		reply.Err = ErrWrongLeader
+		return
+	}
+
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	reply.Value = kv.data[args.Key]
+	DPrintf("%v return key:%v val:%v", kv.me, args.Key, reply.Value)
 }
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
+	reply.Err = OK
+	op := Op{
+		Action: args.Op,
+		Key:    args.Key,
+		Value:  args.Value,
+	}
+
+	_, _, isLeader := kv.rf.Start(op)
+	if !isLeader {
+		reply.Err = ErrWrongLeader
+		return
+	}
+	DPrintf("start %v %v %v", args.Op, args.Key, args.Value)
+
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	msg := <-kv.applyCh
+	op = msg.Command.(Op)
+	if msg.CommandValid {
+		DPrintf("recv %v %v %v", op.Action, op.Key, op.Value)
+		if op.Action == "Put" {
+			kv.data[op.Key] = op.Value
+		} else if op.Action == "Append" {
+			kv.data[op.Key] += op.Value
+		}
+	}
 }
+
+// func (kv *KVServer) Keep() {
+// 	for !kv.killed() {
+// 		msg := <-kv.applyCh
+// 		op := msg.Command.(Op)
+// 		if msg.CommandValid {
+// 			kv.mu.Lock()
+// 			DPrintf("recv %v %v %v", op.Action, op.Key, op.Value)
+// 			kv.data[op.Key] += op.Value
+// 			kv.mu.Unlock()
+// 		}
+// 	}
+// }
 
 //
 // the tester calls Kill() when a KVServer instance won't
@@ -96,6 +148,9 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	// You may need initialization code here.
+	kv.data = make(map[string]string)
+
+	// go kv.Keep()
 
 	return kv
 }
