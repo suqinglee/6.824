@@ -132,19 +132,20 @@ func (rf *Raft) sync() {
 					})
 					continue
 				}
-				entries := make([]LogEntry, 0)
-				prevLogTerm := 0
-				if next-1 < rf.log.size() {
-					prevLogTerm = rf.log.get(next - 1).Term
-					entries = rf.log.Entries[next-rf.log.Base:]
-				}
+				// entries := make([]LogEntry, 0)
+				// prevLogTerm := 0
 				args := AppendEntriesArgs{
 					Term:         rf.currentTerm,
 					LeaderId:     rf.me,
 					PrevLogIndex: next - 1,
-					PrevLogTerm:  prevLogTerm,
-					Entries:      entries,
+					// PrevLogTerm:  prevLogTerm,
+					// Entries:      entries,
 					LeaderCommit: rf.commitIndex,
+				}
+				args.PrevLogTerm = 0
+				if next-1 < rf.log.size() {
+					args.PrevLogTerm = rf.log.get(next - 1).Term
+					args.Entries = append([]LogEntry(nil), rf.log.Entries[next-rf.log.Base:]...)
 				}
 				/* Rules for Leaders
 				 * 3. If last log index >= nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex

@@ -71,6 +71,8 @@ func (kv *KVServer) Request(args *Args, reply *Reply) {
 		return
 	}
 
+	// DPrintf("args.Cid: %v, args.Seq: %v", args.Cid, args.Seq)
+
 	kv.mu.Lock()
 	ch := make(chan Op)
 	kv.recv[index] = ch
@@ -80,6 +82,7 @@ func (kv *KVServer) Request(args *Args, reply *Reply) {
 	case op := <-ch:
 		if op.Cid != args.Cid || op.Seq != args.Seq {
 			reply.Err = ErrRetry
+			// DPrintf("op.Cid: %v, op.Seq: %v, args.Cid: %v, args.Seq: %v", op.Cid, op.Seq, args.Cid, args.Seq)
 			return
 		}
 		reply.Err = OK
@@ -87,7 +90,7 @@ func (kv *KVServer) Request(args *Args, reply *Reply) {
 		reply.Value = kv.data[op.Key]
 		kv.mu.Unlock()
 
-	case <-time.After(2 * time.Second):
+	case <-time.After(1 * time.Second):
 		reply.Err = ErrRetry
 	}
 
@@ -122,102 +125,6 @@ func (kv *KVServer) Update() {
 		kv.mu.Unlock()
 	}
 }
-
-// func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
-// 	// Your code here.
-// 	reply.Err = OK
-// 	_, isLeader := kv.rf.GetState()
-// 	if !isLeader {
-// 		reply.Err = ErrWrongLeader
-// 		return
-// 	}
-
-// 	kv.mu.Lock()
-// 	defer kv.mu.Unlock()
-
-// 	_, exist := kv.updating[args.Key]
-// 	if exist {
-// 		reply.Err = ErrRetry
-// 	}
-// 	reply.Value = kv.data[args.Key]
-// 	DPrintf("return cid:%v seq:%v key:%v val:%v", args.Cid, args.Seq, args.Key, reply.Value)
-// }
-
-// func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
-// 	op := Op{
-// 		Action: args.Op,
-// 		Key:    args.Key,
-// 		Value:  args.Value,
-// 		Cid:    args.Cid,
-// 		Seq:    args.Seq,
-// 	}
-
-// 	var isLeader bool
-// 	op.Index, op.Term, isLeader = kv.rf.Start(op)
-// 	if !isLeader {
-// 		reply.Err = ErrWrongLeader
-// 		return
-// 	}
-
-// 	ctx := &OpCtx{
-// 		op:      &op,
-// 		applied: make(chan byte),
-// 		err:     OK,
-// 	}
-// 	kv.mu.Lock()
-// 	kv.asking[op.Index] = ctx
-// 	kv.updating[op.Key]++
-// 	prev := kv.updating[op.Key]
-// 	kv.mu.Unlock()
-
-// 	select {
-// 	case <-ctx.applied:
-// 		reply.Err = ctx.err
-// 	case <-time.After(1 * time.Second):
-// 		reply.Err = ErrRetry
-// 	}
-
-// 	kv.mu.Lock()
-// 	delete(kv.asking, op.Index)
-// 	if prev == kv.updating[op.Key] {
-// 		delete(kv.updating, op.Key)
-// 	}
-// 	kv.mu.Unlock()
-// 	DPrintf("start %v %v %v, cid=%v, seq=%v", args.Op, args.Key, args.Value, args.Cid, args.Seq)
-// }
-
-// func (kv *KVServer) Update() {
-// 	for !kv.killed() {
-// msg := <-kv.applyCh
-// index := msg.CommandIndex
-// op := msg.Command.(Op)
-// if msg.CommandValid {
-// 	kv.execute(op, index)
-// }
-// 	}
-// }
-
-// func (kv *KVServer) execute(op Op, i int) {
-// 	kv.mu.Lock()
-// 	defer kv.mu.Unlock()
-
-// 	ctx, exist := kv.asking[i]
-// 	if exist && op.Seq > kv.applied[op.Cid] {
-// 		// if ctx.op.Term != op.Term {
-// 		// 	ctx.err = ErrWrongLeader
-// 		// }
-// 		switch op.Action {
-// 		case "Put":
-// 			kv.data[op.Key] = op.Value
-// 		case "Append":
-// 			kv.data[op.Key] += op.Value
-// 		}
-// 	}
-// 	if exist {
-// 		close(ctx.applied)
-// 	}
-// 	DPrintf("exec %v %v %v %v %v", op.Action, op.Key, op.Cid, op.Seq, op.Value)
-// }
 
 func (kv *KVServer) Kill() {
 	atomic.StoreInt32(&kv.dead, 1)
