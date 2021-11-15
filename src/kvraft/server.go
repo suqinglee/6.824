@@ -71,7 +71,7 @@ func (kv *KVServer) Request(args *Args, reply *Reply) {
 		return
 	}
 
-	// DPrintf("args.Cid: %v, args.Seq: %v", args.Cid, args.Seq)
+	// DPrintf("[%v] (%v, %v) cid=%v, seq=%v", args.Act, args.Key, args.Value, args.Cid, args.Seq)
 
 	kv.mu.Lock()
 	ch := make(chan Op)
@@ -82,17 +82,18 @@ func (kv *KVServer) Request(args *Args, reply *Reply) {
 	case op := <-ch:
 		if op.Cid != args.Cid || op.Seq != args.Seq {
 			reply.Err = ErrRetry
-			// DPrintf("op.Cid: %v, op.Seq: %v, args.Cid: %v, args.Seq: %v", op.Cid, op.Seq, args.Cid, args.Seq)
-			return
+		} else {
+			reply.Err = OK
+			kv.mu.Lock()
+			reply.Value = kv.data[op.Key]
+			kv.mu.Unlock()
 		}
-		reply.Err = OK
-		kv.mu.Lock()
-		reply.Value = kv.data[op.Key]
-		kv.mu.Unlock()
 
 	case <-time.After(1 * time.Second):
 		reply.Err = ErrRetry
 	}
+
+	// DPrintf("cid=%v, seq=%v, reply=%v", args.Cid, args.Seq, reply.Err)
 
 	kv.mu.Lock()
 	close(kv.recv[index])

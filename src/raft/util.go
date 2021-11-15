@@ -177,6 +177,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.nextIndex[rf.me] = rf.log.size()
 	rf.matchIndex[rf.me] = rf.nextIndex[rf.me] - 1
 
+	go rf.heartbeat()
+
 	rf.persist()
 	return rf.log.size() - 1, rf.currentTerm, true
 }

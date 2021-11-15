@@ -54,10 +54,11 @@ func (ck *Clerk) Request(key string, value string, act string) string {
 	reply := Reply{}
 
 	for {
+		// DPrintf("key=%v, value=%v", key, value)
 		ok := ck.servers[ck.lid].Call("KVServer.Request", &args, &reply)
 		if ok && reply.Err == OK {
 			break
-		} else if reply.Err == ErrWrongLeader {
+		} else if !ok || reply.Err == ErrWrongLeader {
 			ck.mu.Lock()
 			ck.lid = (ck.lid + 1) % len(ck.servers)
 			ck.mu.Unlock()
