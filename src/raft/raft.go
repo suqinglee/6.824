@@ -51,6 +51,10 @@ func (rf *Raft) ticker() {
 	}
 }
 
+func (rf *Raft) StateSize() int {
+	return rf.persister.RaftStateSize()
+}
+
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
 	rf := &Raft{}
@@ -65,8 +69,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	rf.log.Entries = append(rf.log.Entries, LogEntry{Term: 0})
 	rf.log.Base = 0
-	rf.commitIndex = 0
-	rf.lastApplied = 0
 	rf.nextIndex = make([]int, len(rf.peers))
 	rf.matchIndex = make([]int, len(rf.peers))
 
@@ -75,6 +77,17 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.readPersist(persister.ReadRaftState())
 	rf.snapshot = persister.ReadSnapshot()
 
+	go func() {
+		rf.mu.Lock()
+		rf.applyCh <- ApplyMsg{
+			SnapshotValid: true,
+			SnapshotIndex: rf.log.Base,
+			SnapshotTerm: rf.log.Entries[0].Term,
+			Snapshot: rf.snapshot,
+		}
+		rf.mu.Unlock()
+	}()
+	rf.commitIndex = 0 // 为了重启后发的快照不被cond拒绝，如果=Base，会在cond返回false
 	rf.lastApplied = rf.log.Base
 
 	go rf.ticker()

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"bytes"
 
 	"6.824/labgob"
 	"6.824/labrpc"
@@ -28,12 +29,6 @@ type Op struct {
 	Act   string
 }
 
-// type OpCtx struct {
-// 	op      *Op
-// 	applied chan byte
-// 	err     string
-// }
-
 type KVServer struct {
 	mu      sync.Mutex
 	me      int
@@ -43,7 +38,6 @@ type KVServer struct {
 
 	maxraftstate int // snapshot if log grows this big
 
-	// ClientA PutAppend，RPC发送成功，返回失败，ClientA resent，resent的op提交时忽略，所以加了下面两个字段
 	data map[string]string
 	mseq map[int64]int64
 	recv map[int]chan Op
@@ -71,7 +65,7 @@ func (kv *KVServer) Request(args *Args, reply *Reply) {
 		return
 	}
 
-	// DPrintf("[%v] (%v, %v) cid=%v, seq=%v", args.Act, args.Key, args.Value, args.Cid, args.Seq)
+	DPrintf("[%v] (%v, %v) cid=%v, seq=%v", args.Act, args.Key, args.Value, args.Cid, args.Seq)
 
 	kv.mu.Lock()
 	ch := make(chan Op)
@@ -93,7 +87,7 @@ func (kv *KVServer) Request(args *Args, reply *Reply) {
 		reply.Err = ErrRetry
 	}
 
-	// DPrintf("cid=%v, seq=%v, reply=%v", args.Cid, args.Seq, reply.Err)
+	DPrintf("cid=%v, seq=%v, reply=%v, value=%v", args.Cid, args.Seq, reply.Err, reply.Value)
 
 	kv.mu.Lock()
 	close(kv.recv[index])
@@ -104,26 +98,53 @@ func (kv *KVServer) Request(args *Args, reply *Reply) {
 func (kv *KVServer) Update() {
 	for !kv.killed() {
 		msg := <-kv.applyCh
-		if !msg.CommandValid {
-			continue
-		}
-		op := msg.Command.(Op)
+		index := 0
+		if msg.CommandValid {
+			index = msg.CommandIndex
+			op := msg.Command.(Op)
+			kv.mu.Lock()
+			if op.Seq > kv.mseq[op.Cid] {
+				kv.mseq[op.Cid] = op.Seq
+				switch op.Act {
+				case PUT:
+					kv.data[op.Key] = op.Value
+				case APPEND:
+					kv.data[op.Key] += op.Value
+				}
+			}
 
-		kv.mu.Lock()
-		if op.Seq > kv.mseq[op.Cid] {
-			kv.mseq[op.Cid] = op.Seq
-			switch op.Act {
-			case PUT:
-				kv.data[op.Key] = op.Value
-			case APPEND:
-				kv.data[op.Key] += op.Value
+			if _, ok := kv.recv[msg.CommandIndex]; ok {
+				kv.recv[msg.CommandIndex] <- op
+			}
+			kv.mu.Unlock()
+		} else if msg.SnapshotValid  {
+			DPrintf("Receive Snapshot, lastIndex %v, len(snapshot) %v", msg.SnapshotIndex, len(msg.Snapshot))
+			if msg.Snapshot != nil && len(msg.Snapshot) > 0 {
+				ok := kv.rf.CondInstallSnapshot(msg.SnapshotTerm, msg.SnapshotIndex, msg.Snapshot)
+				if ok {
+					DPrintf("Install Snapshot, lastIndex %v", msg.SnapshotIndex)
+					r := bytes.NewBuffer(msg.Snapshot)
+					d := labgob.NewDecoder(r)
+					kv.mu.Lock()
+					d.Decode(&kv.data)
+					d.Decode(&kv.mseq)
+					kv.mu.Unlock()
+					index = msg.SnapshotIndex
+				}
 			}
 		}
 
-		if _, ok := kv.recv[msg.CommandIndex]; ok {
-			kv.recv[msg.CommandIndex] <- op
+		size := kv.rf.StateSize()
+		if index != 0 && size > kv.maxraftstate && kv.maxraftstate != -1 {
+			DPrintf("Log Trim, index %v, size %v", index, size)
+			kv.mu.Lock()
+			w := new(bytes.Buffer)
+			e := labgob.NewEncoder(w)
+			e.Encode(kv.data)
+			e.Encode(kv.mseq)
+			kv.rf.Snapshot(index, w.Bytes())
+			kv.mu.Unlock()
 		}
-		kv.mu.Unlock()
 	}
 }
 
@@ -148,6 +169,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.maxraftstate = maxraftstate
 
 	// You may need initialization code here.
+	DPrintf("Start KVServer %v, maxraftstate %v", me, maxraftstate)
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)

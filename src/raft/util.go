@@ -90,17 +90,6 @@ func (rf *Raft) persistSnapshot() {
 	rf.persister.SaveStateAndSnapshot(data, rf.snapshot)
 }
 
-// func (rf *Raft) persistStateAndSnapshot(snapshot []byte) {
-// 	w := new(bytes.Buffer)
-// 	e := labgob.NewEncoder(w)
-// 	e.Encode(rf.currentTerm)
-// 	e.Encode(rf.votedFor)
-// 	e.Encode(rf.log)
-// 	data := w.Bytes()
-
-// 	rf.persister.SaveStateAndSnapshot(data, snapshot)
-// }
-
 //
 // restore previously persisted state.
 //

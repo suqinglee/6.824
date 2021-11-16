@@ -69,13 +69,15 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	DPrintf("%v snapshot", rf.me)
+	// DPrintf("%v snapshot", rf.me)
 	if index <= rf.log.Base {
 		return
 	}
 	rf.log.Entries = rf.log.Entries[index-rf.log.Base:]
 	rf.log.Base = index
 	rf.snapshot = snapshot
+	rf.lastApplied = index
+	rf.commitIndex = index
 	rf.persistSnapshot()
 }
 
@@ -85,7 +87,7 @@ func (rf *Raft) sendSnapshot(id int, peer *labrpc.ClientEnd, args *InstallSnapsh
 	if !ok {
 		return
 	}
-	DPrintf("%v send snapshot", rf.me)
+	// DPrintf("%v send snapshot", rf.me)
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()

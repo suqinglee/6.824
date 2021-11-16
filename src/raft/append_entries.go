@@ -62,7 +62,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 	if rf.log.get(args.PrevLogIndex).Term != args.PrevLogTerm {
 		reply.ConflictTerm = rf.log.get(args.PrevLogIndex).Term
-		for i := 1; i <= args.PrevLogIndex; i++ {
+		for i := rf.log.Base + 1; i <= args.PrevLogIndex; i++ {	// 不是从1开始，snapshot就越界了
 			if rf.log.get(i).Term == reply.ConflictTerm {
 				reply.ConflictIndex = i
 				break
@@ -189,7 +189,7 @@ func (rf *Raft) heartbeat() {
 					rf.nextIndex[id] = reply.ConflictIndex
 				} else {
 					conflictIndex := -1
-					for i := args.PrevLogIndex; i > 0; i-- {
+					for i := args.PrevLogIndex; i > rf.log.Base; i-- { // not i > 0
 						if rf.log.get(i).Term == reply.ConflictTerm {
 							conflictIndex = i
 							break
