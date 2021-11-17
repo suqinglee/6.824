@@ -29,45 +29,67 @@ type Config struct {
 }
 
 const (
-	OK = "OK"
+	OK             = "OK"
+	ErrWrongLeader = "ErrWrongLeader"
+	ErrRetry       = "ErrRetry"
+
+	Join  = "Join"
+	Leave = "Leave"
+	Move  = "Move"
+	Query = "Query"
 )
 
-type Err string
+// type Err string
 
-type JoinArgs struct {
-	Servers map[int][]string // new GID -> servers mappings
+// type JoinArgs struct {
+// 	Servers map[int][]string // new GID -> servers mappings
+// }
+
+// type JoinReply struct {
+// 	WrongLeader bool
+// 	Err         Err
+// }
+
+// type LeaveArgs struct {
+// 	GIDs []int
+// }
+
+// type LeaveReply struct {
+// 	WrongLeader bool
+// 	Err         Err
+// }
+
+// type MoveArgs struct {
+// 	Shard int
+// 	GID   int
+// }
+
+// type MoveReply struct {
+// 	WrongLeader bool
+// 	Err         Err
+// }
+
+// type QueryArgs struct {
+// 	Num int // desired config number
+// }
+
+// type QueryReply struct {
+// 	WrongLeader bool
+// 	Err         Err
+// 	Config      Config
+// }
+
+type Args struct {
+	Act     string
+	Cid     int64
+	Seq     int64
+	GIDs    []int
+	Shard   int
+	Num     int
+	Servers map[int][]string
 }
 
-type JoinReply struct {
-	WrongLeader bool
-	Err         Err
-}
-
-type LeaveArgs struct {
-	GIDs []int
-}
-
-type LeaveReply struct {
-	WrongLeader bool
-	Err         Err
-}
-
-type MoveArgs struct {
-	Shard int
-	GID   int
-}
-
-type MoveReply struct {
-	WrongLeader bool
-	Err         Err
-}
-
-type QueryArgs struct {
-	Num int // desired config number
-}
-
-type QueryReply struct {
-	WrongLeader bool
-	Err         Err
-	Config      Config
+type Reply struct {
+	Err    string
+	Config Config
 }
