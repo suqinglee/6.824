@@ -134,9 +134,9 @@ func (kv *KVServer) Update() {
 			}
 		}
 
-		size := kv.rf.StateSize()
-		if index != 0 && size > kv.maxraftstate && kv.maxraftstate != -1 {
-			DPrintf("Log Trim, index %v, size %v", index, size)
+		// size := kv.rf.StateSize()
+		if index != 0 && kv.rf.StateSize() > kv.maxraftstate && kv.maxraftstate != -1 {
+			// DPrintf("Log Trim, index %v, size %v", index, size)
 			kv.mu.Lock()
 			w := new(bytes.Buffer)
 			e := labgob.NewEncoder(w)
