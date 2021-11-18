@@ -1,17 +1,22 @@
 package shardkv
 
+import (
+	"bytes"
+	"sync"
+	"time"
 
-import "6.824/labrpc"
-import "6.824/raft"
-import "sync"
-import "6.824/labgob"
-
-
+	"6.824/labgob"
+	"6.824/labrpc"
+	"6.824/raft"
+)
 
 type Op struct {
-	// Your definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+	Key   string
+	Value string
+	Gid   int
+	Cid   int64
+	Seq   int64
+	Act   string
 }
 
 type ShardKV struct {
@@ -25,15 +30,111 @@ type ShardKV struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
+	data map[string]string
+	mseq map[int64]int64
+	recv map[int]chan Op
 }
 
+func (kv *ShardKV) Request(args *Args, reply *Reply) {
+	if args.Gid != kv.gid {
+		reply.Err = ErrWrongGroup
+		return
+	}
+	kv.mu.Lock()
+	if args.Seq <= kv.mseq[args.Cid] {
+		reply.Err = OK
+		reply.Value = kv.data[args.Key]
+		kv.mu.Unlock()
+		return
+	}
+	kv.mu.Unlock()
 
-func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
-	// Your code here.
+	index, _, isLeader := kv.rf.Start(Op{
+		Key:   args.Key,
+		Value: args.Value,
+		Gid:   args.Gid,
+		Cid:   args.Cid,
+		Seq:   args.Seq,
+		Act:   args.Act,
+	})
+	if !isLeader {
+		reply.Err = ErrWrongLeader
+		return
+	}
+
+	kv.mu.Lock()
+	ch := make(chan Op)
+	kv.recv[index] = ch
+	kv.mu.Unlock()
+
+	select {
+	case op := <-ch:
+		if op.Cid != args.Cid || op.Seq != args.Seq {
+			reply.Err = ErrRetry
+		} else {
+			reply.Err = OK
+			kv.mu.Lock()
+			reply.Value = kv.data[op.Key]
+			kv.mu.Unlock()
+		}
+
+	case <-time.After(1 * time.Second):
+		reply.Err = ErrRetry
+	}
+
+	kv.mu.Lock()
+	close(kv.recv[index])
+	delete(kv.recv, index)
+	kv.mu.Unlock()
 }
 
-func (kv *ShardKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
-	// Your code here.
+func (kv *ShardKV) Update() {
+	for {
+		msg := <-kv.applyCh
+		index := 0
+		if msg.CommandValid {
+			index = msg.CommandIndex
+			op := msg.Command.(Op)
+			kv.mu.Lock()
+			if op.Seq > kv.mseq[op.Cid] {
+				kv.mseq[op.Cid] = op.Seq
+				switch op.Act {
+				case PUT:
+					kv.data[op.Key] = op.Value
+				case APPEND:
+					kv.data[op.Key] += op.Value
+				}
+			}
+
+			if _, ok := kv.recv[msg.CommandIndex]; ok {
+				kv.recv[msg.CommandIndex] <- op
+			}
+			kv.mu.Unlock()
+		} else if msg.SnapshotValid {
+			if msg.Snapshot != nil && len(msg.Snapshot) > 0 {
+				ok := kv.rf.CondInstallSnapshot(msg.SnapshotTerm, msg.SnapshotIndex, msg.Snapshot)
+				if ok {
+					r := bytes.NewBuffer(msg.Snapshot)
+					d := labgob.NewDecoder(r)
+					kv.mu.Lock()
+					d.Decode(&kv.data)
+					d.Decode(&kv.mseq)
+					kv.mu.Unlock()
+					index = msg.SnapshotIndex
+				}
+			}
+		}
+
+		if index != 0 && kv.rf.StateSize() > kv.maxraftstate && kv.maxraftstate != -1 {
+			kv.mu.Lock()
+			w := new(bytes.Buffer)
+			e := labgob.NewEncoder(w)
+			e.Encode(kv.data)
+			e.Encode(kv.mseq)
+			kv.rf.Snapshot(index, w.Bytes())
+			kv.mu.Unlock()
+		}
+	}
 }
 
 //
@@ -46,7 +147,6 @@ func (kv *ShardKV) Kill() {
 	kv.rf.Kill()
 	// Your code here, if desired.
 }
-
 
 //
 // servers[] contains the ports of the servers in this group.
@@ -96,6 +196,11 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
+	kv.data = make(map[string]string)
+	kv.mseq = make(map[int64]int64)
+	kv.recv = make(map[int]chan Op)
+
+	go kv.Update()
 
 	return kv
 }

@@ -1,5 +1,7 @@
 package shardkv
 
+import "log"
+
 //
 // Sharded key/value server.
 // Lots of replica groups, each running Raft.
@@ -14,31 +16,59 @@ const (
 	ErrNoKey       = "ErrNoKey"
 	ErrWrongGroup  = "ErrWrongGroup"
 	ErrWrongLeader = "ErrWrongLeader"
+	ErrRetry       = "ErrRetry"
+
+	PUT    = "Put"
+	GET    = "Get"
+	APPEND = "Append"
 )
 
-type Err string
+const Debug = false
 
-// Put or Append
-type PutAppendArgs struct {
-	// You'll have to add definitions here.
+func DPrintf(format string, a ...interface{}) (n int, err error) {
+	if Debug {
+		log.Printf(format, a...)
+	}
+	return
+}
+
+// type Err string
+
+// // Put or Append
+// type PutAppendArgs struct {
+// 	// You'll have to add definitions here.
+// 	Key   string
+// 	Value string
+// 	Op    string // "Put" or "Append"
+// 	// You'll have to add definitions here.
+// 	// Field names must start with capital letters,
+// 	// otherwise RPC will break.
+// }
+
+// type PutAppendReply struct {
+// 	Err Err
+// }
+
+// type GetArgs struct {
+// 	Key string
+// 	// You'll have to add definitions here.
+// }
+
+// type GetReply struct {
+// 	Err   Err
+// 	Value string
+// }
+
+type Args struct {
 	Key   string
 	Value string
-	Op    string // "Put" or "Append"
-	// You'll have to add definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+	Act   string
+	Gid   int
+	Cid   int64
+	Seq   int64
 }
 
-type PutAppendReply struct {
-	Err Err
-}
-
-type GetArgs struct {
-	Key string
-	// You'll have to add definitions here.
-}
-
-type GetReply struct {
-	Err   Err
+type Reply struct {
+	Err   string
 	Value string
 }
