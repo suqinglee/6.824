@@ -56,7 +56,7 @@ func (ck *Clerk) Get(key string) string {
 	return ck.Request(Args {
 		Key: key,
 		Act: GET,
-		Shard: key2shard(key),
+		// Shard: key2shard(key),
 	})
 }
 
@@ -66,7 +66,7 @@ func (ck *Clerk) Put(key string, value string) {
 		Key: key,
 		Value: value,
 		Act: PUT,
-		Shard: key2shard(key),
+		// Shard: key2shard(key),
 	})
 }
 func (ck *Clerk) Append(key string, value string) {
@@ -75,17 +75,17 @@ func (ck *Clerk) Append(key string, value string) {
 		Key: key,
 		Value: value,
 		Act: APPEND,
-		Shard: key2shard(key),
+		// Shard: key2shard(key),
 	})
 }
 
-func (ck *Clerk) Migrate(shard int, data map[string]string) {
-	ck.Request(Args {
-		Act: MIGRATE,
-		Shard: shard,
-		Data: data,
-	})
-}
+// func (ck *Clerk) Migrate(shard int, data map[string]string) {
+// 	ck.Request(Args {
+// 		Act: MIGRATE,
+// 		Shard: shard,
+// 		Data: data,
+// 	})
+// }
 
 func (ck *Clerk) Request(args Args) string {
 	args.Cid = ck.cid
@@ -93,14 +93,14 @@ func (ck *Clerk) Request(args Args) string {
 
 	for {
 		ck.config = ck.sm.Query(-1)
-		gid := ck.config.Shards[args.Shard]
-		args.Gid = gid
-		servers, ok := ck.config.Groups[gid]
+		shard := key2shard(args.Key)
+		args.Gid = ck.config.Shards[shard]
+		servers, ok := ck.config.Groups[args.Gid]
 		if !ok {
 			ck.config = ck.sm.Query(-1)
 			continue
 		}
-		args.Num = ck.config.Num
+		// args.Num = ck.config.Num
 
 		for i := 0; i < len(servers); i++ {
 			srv := ck.make_end(servers[i])

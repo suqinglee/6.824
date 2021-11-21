@@ -16,7 +16,8 @@ const (
 	PUT     = "Put"
 	GET     = "Get"
 	APPEND  = "Append"
-	MIGRATE = "Migrate"
+	// MIGRATE = "Migrate"
+	// RECONF  = "Reconf"
 )
 
 const Debug = true
@@ -31,13 +32,14 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 type Args struct {
 	Key   string
 	Value string
-	Shard int
+	// Shard int
 	Act   string
 	Gid   int
 	Cid   int64
 	Seq   int64
-	Num   int
-	Data  map[string]string
+	// Num   int
+	// Data  map[string]string
+	// Config shardctrler.Config
 }
 
 type Reply struct {
@@ -59,16 +61,16 @@ func (kv *ShardKV) AppendHandler(op Args) {
 	}
 }
 
-func (kv *ShardKV) MigrateHandler(op Args) {
-	if op.Seq > kv.mseq[op.Cid] {
-		DPrintf("me:%v gid:%v recv shard %v data %v", kv.me, kv.gid, op.Shard, op.Data)
-		for key, value := range op.Data {
-			kv.data[key2shard(key)][key] = value
-		}
-		kv.migrating[op.Shard] = false
-		DPrintf("me:%v gid:%v migrating %v", kv.me, kv.gid, kv.migrating)
-	}
-}
+// func (kv *ShardKV) MigrateHandler(op Args) {
+// 	if op.Seq > kv.mseq[op.Cid] {
+// 		DPrintf("me:%v gid:%v recv shard %v data %v, migrating %v, confignum %v", kv.me, kv.gid, op.Shard, op.Data, kv.migrating, op.Num)
+// 		for key, value := range op.Data {
+// 			kv.data[key2shard(key)][key] = value
+// 		}
+// 		kv.migrating[op.Shard] = false
+// 		DPrintf("me:%v gid:%v recv shard %v data %v, migrating %v, confignum %v", kv.me, kv.gid, op.Shard, op.Data, kv.migrating, op.Num)
+// 	}
+// }
 
 func (kv *ShardKV) SnapshotHandler(snapshot []byte, index int, term int) {
 	if len(snapshot) > 0 && kv.rf.CondInstallSnapshot(term, index, snapshot) {
@@ -91,11 +93,11 @@ func (kv *ShardKV) CommandHandler(op Args, index int) {
 		kv.PutHandler(op)
 	case APPEND:
 		kv.AppendHandler(op)
-	case MIGRATE:
-		kv.MigrateHandler(op)
+	// case MIGRATE:
+	// 	kv.MigrateHandler(op)
 	}
-	if _, ok := kv.recv[index]; ok {
-		kv.recv[index] <- op
+	if _, ok := kv.wait[index]; ok {
+		kv.wait[index] <- op
 	}
 }
 
