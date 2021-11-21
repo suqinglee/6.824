@@ -223,7 +223,6 @@ func TestMissChange(t *testing.T) {
 
 	ck := cfg.makeClient()
 
-	fmt.Println("Join 0")
 	cfg.join(0)
 
 	n := 10
@@ -238,19 +237,14 @@ func TestMissChange(t *testing.T) {
 		check(t, ck, ka[i], va[i])
 	}
 
-	fmt.Println("Join 1")
 	cfg.join(1)
 
-	fmt.Println("shutdown 0 1 2")
 	cfg.ShutdownServer(0, 0)
 	cfg.ShutdownServer(1, 0)
 	cfg.ShutdownServer(2, 0)
 
-	fmt.Println("Join 2")
 	cfg.join(2)
-	fmt.Println("leave 1")
 	cfg.leave(1)
-	fmt.Println("leave 0")
 	cfg.leave(0)
 
 	for i := 0; i < n; i++ {
@@ -260,7 +254,6 @@ func TestMissChange(t *testing.T) {
 		va[i] += x
 	}
 
-	fmt.Println("Join 1")
 	cfg.join(1)
 
 	for i := 0; i < n; i++ {
@@ -270,7 +263,6 @@ func TestMissChange(t *testing.T) {
 		va[i] += x
 	}
 
-	fmt.Println("start 0 1 2")
 	cfg.StartServer(0, 0)
 	cfg.StartServer(1, 0)
 	cfg.StartServer(2, 0)
@@ -284,14 +276,11 @@ func TestMissChange(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	fmt.Println("shutdown 0 1 2")
 	cfg.ShutdownServer(0, 1)
 	cfg.ShutdownServer(1, 1)
 	cfg.ShutdownServer(2, 1)
 
-	fmt.Println("Join 0")
 	cfg.join(0)
-	fmt.Println("leave 2")
 	cfg.leave(2)
 
 	for i := 0; i < n; i++ {
@@ -301,7 +290,6 @@ func TestMissChange(t *testing.T) {
 		va[i] += x
 	}
 
-	fmt.Println("start 0 1 2")
 	cfg.StartServer(0, 1)
 	cfg.StartServer(1, 1)
 	cfg.StartServer(2, 1)

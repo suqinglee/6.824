@@ -79,14 +79,6 @@ func (ck *Clerk) Append(key string, value string) {
 	})
 }
 
-// func (ck *Clerk) Migrate(shard int, data map[string]string) {
-// 	ck.Request(Args {
-// 		Act: MIGRATE,
-// 		Shard: shard,
-// 		Data: data,
-// 	})
-// }
-
 func (ck *Clerk) Request(args Args) string {
 	args.Cid = ck.cid
 	args.Seq = atomic.AddInt64(&ck.seq, 1)
