@@ -34,7 +34,6 @@ type Args struct {
 	Key   string
 	Value string
 	Act   string
-	Gid   int
 	Cid   int64
 	Seq   int64
 }

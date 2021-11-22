@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"math/big"
 	"sync/atomic"
+	"time"
 
 	"6.824/labrpc"
 	"6.824/shardctrler"
@@ -52,7 +53,6 @@ func MakeClerk(ctrlers []*labrpc.ClientEnd, make_end func(string) *labrpc.Client
 }
 
 func (ck *Clerk) Get(key string) string {
-	// DPrintf("Get %v", key)
 	return ck.Request(Args {
 		Key: key,
 		Act: GET,
@@ -61,7 +61,6 @@ func (ck *Clerk) Get(key string) string {
 }
 
 func (ck *Clerk) Put(key string, value string) {
-	// DPrintf("Put %v %v", key, value)
 	ck.Request(Args {
 		Key: key,
 		Value: value,
@@ -70,7 +69,6 @@ func (ck *Clerk) Put(key string, value string) {
 	})
 }
 func (ck *Clerk) Append(key string, value string) {
-	// DPrintf("Append %v %v", key, value)
 	ck.Request(Args {
 		Key: key,
 		Value: value,
@@ -84,27 +82,21 @@ func (ck *Clerk) Request(args Args) string {
 	args.Seq = atomic.AddInt64(&ck.seq, 1)
 
 	for {
-		ck.config = ck.sm.Query(-1)
 		shard := key2shard(args.Key)
-		args.Gid = ck.config.Shards[shard]
-		servers, ok := ck.config.Groups[args.Gid]
-		if !ok {
-			ck.config = ck.sm.Query(-1)
-			continue
-		}
-		// args.Num = ck.config.Num
-
-		for i := 0; i < len(servers); i++ {
-			srv := ck.make_end(servers[i])
-			reply := Reply{}
-			ok := srv.Call("ShardKV.Request", &args, &reply)
-			if ok && reply.Err == OK {
-				return reply.Value
-			} else if ok && reply.Err == ErrWrongGroup {
-				ck.config = ck.sm.Query(-1)
-				break
+		gid := ck.config.Shards[shard]
+		if servers, ok := ck.config.Groups[gid]; ok {
+			for i := 0; i < len(servers); i++ {
+				srv := ck.make_end(servers[i])
+				reply := Reply{}
+				ok := srv.Call("ShardKV.Request", &args, &reply)
+				if ok && reply.Err == OK {
+					return reply.Value
+				} else if ok && reply.Err == ErrWrongGroup {
+					break
+				}
 			}
-			// time.Sleep(100 * time.Millisecond)
 		}
+		time.Sleep(100 * time.Millisecond)
+		ck.config = ck.sm.Query(-1)
 	}
 }

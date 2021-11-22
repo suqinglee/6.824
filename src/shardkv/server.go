@@ -55,10 +55,8 @@ func (kv *ShardKV) Update() {
 			kv.Compaction(msg.SnapshotIndex)
 		} else {
 			if config, ok := msg.Command.(shardctrler.Config); ok {
-				DPrintf("update config %v", config)
 				kv.ConfigHandler(config)
 			} else if migrateData, ok := msg.Command.(MigrateData); ok {
-				DPrintf("update migrate %v", migrateData)
 				kv.MigrateHandler(migrateData)
 			} else {
 				kv.CommandHandler(msg.Command.(Args), msg.CommandIndex)
@@ -75,7 +73,6 @@ func (kv *ShardKV) PullConfig() {
 			continue
 		}
 		if config, changed := kv.checkConfig(); changed {
-			DPrintf("pull config %v", config)
 			kv.rf.Start(config)
 		}
 	}
