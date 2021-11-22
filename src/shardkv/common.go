@@ -62,6 +62,17 @@ type MigrateData struct {
 	Mseq map[int64]int64
 }
 
+func (kv *ShardKV) copyMap(num int, shard int) (map[string]string, map[int64]int64) {
+	data, mseq := make(map[string]string), make(map[int64]int64)
+	for k, v := range kv.send[num][shard] {
+		data[k] = v
+	}
+	for k, v := range kv.mseq {
+		mseq[k] = v
+	}
+	return data, mseq
+}
+
 func (kv *ShardKV) rightShard(key string) bool {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
@@ -179,7 +190,9 @@ func (kv *ShardKV) MigrateHandler(data MigrateData) {
 			kv.data[data.Shard][k] = v
 		}
 		for k, v := range data.Mseq {
-			kv.mseq[k] = v
+			if v > kv.mseq[k] {
+				kv.mseq[k] = v
+			}
 		}
 	}
 }

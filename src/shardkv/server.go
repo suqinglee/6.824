@@ -33,10 +33,10 @@ type ShardKV struct {
 }
 
 func (kv *ShardKV) Request(args *Args, reply *Reply) {
-	if !kv.rightShard(args.Key) {
-		reply.Err = ErrWrongGroup
-		return
-	}
+	// if !kv.rightShard(args.Key) {
+	// 	reply.Err = ErrWrongGroup
+	// 	return
+	// }
 
 	index, _, isLeader := kv.rf.Start(*args)
 	if !isLeader {
@@ -88,12 +88,11 @@ func (kv *ShardKV) Migrate(args *MigrateArgs, reply *MigrateReply) {
 	}
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
-	if args.ConfigNum > kv.config.Num {
+	if args.ConfigNum >= kv.config.Num {
 		reply.Err = ErrRetry
 		return
 	}
-	reply.Data = kv.send[args.ConfigNum][args.Shard]
-	reply.Mseq = kv.mseq
+	reply.Data, reply.Mseq = kv.copyMap(args.ConfigNum, args.Shard)
 	reply.Err = OK
 }
 
