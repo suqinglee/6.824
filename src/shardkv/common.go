@@ -21,7 +21,7 @@ const (
 	MOVE    = "Move"
 )
 
-const Debug = false
+const Debug = true
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
 	if Debug {
@@ -36,6 +36,7 @@ type Args struct {
 	Act   string
 	Cid   int64
 	Seq   int64
+	Num   int
 }
 
 type Reply struct {
@@ -78,18 +79,18 @@ func (kv *ShardKV) rightShard(key string) bool {
 	return kv.config.Shards[key2shard(key)] == kv.gid
 }
 
-func (kv *ShardKV) checkConfig() (shardctrler.Config, bool) {
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
-	config := kv.clerk.sm.Query(kv.config.Num + 1)
-	return config, config.Num != kv.config.Num
-}
+// func (kv *ShardKV) checkConfig() (shardctrler.Config, bool) {
+// 	kv.mu.Lock()
+// 	defer kv.mu.Unlock()
+// 	config := kv.clerk.sm.Query(kv.config.Num + 1)
+// 	return config, config.Num != kv.config.Num
+// }
 
-func (kv *ShardKV) needShard() bool {
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
-	return len(kv.need) > 0
-}
+// func (kv *ShardKV) needShard() bool {
+// 	kv.mu.Lock()
+// 	defer kv.mu.Unlock()
+// 	return len(kv.need) > 0
+// }
 
 func (kv *ShardKV) PutHandler(op Args) {
 	if op.Seq > kv.mseq[op.Cid] {
@@ -139,8 +140,12 @@ func (kv *ShardKV) CommandHandler(op Args, index int) {
 			op.Value = kv.GetHandler(op)
 		}
 	}
+
 	if _, ok := kv.wait[index]; ok {
-		kv.wait[index] <- op
+		select {
+		case kv.wait[index] <- op:
+		case <-time.After(1 * time.Second):
+		}
 	}
 }
 
@@ -235,7 +240,7 @@ func (kv *ShardKV) Receive(index int, cid int64, seq int64) (err string, value s
 	}
 
 	kv.mu.Lock()
-	close(kv.wait[index])
+	// close(kv.wait[index])
 	delete(kv.wait, index)
 	kv.mu.Unlock()
 

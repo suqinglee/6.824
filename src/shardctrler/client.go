@@ -65,14 +65,23 @@ func (ck *Clerk) Request(servers map[int][]string, num int, gids []int, shard in
 	}
 	reply := Reply{}
 
+	// for {
+	// 	ok := ck.servers[ck.lid].Call("ShardCtrler.Request", &args, &reply)
+	// 	if ok && reply.Err == OK {
+	// 		break
+	// 	} else if !ok || reply.Err == ErrWrongLeader {
+	// 		ck.mu.Lock()
+	// 		ck.lid = (ck.lid + 1) % len(ck.servers)
+	// 		ck.mu.Unlock()
+	// 	}
+	// }
+
 	for {
-		ok := ck.servers[ck.lid].Call("ShardCtrler.Request", &args, &reply)
-		if ok && reply.Err == OK {
-			break
-		} else if !ok || reply.Err == ErrWrongLeader {
-			ck.mu.Lock()
-			ck.lid = (ck.lid + 1) % len(ck.servers)
-			ck.mu.Unlock()
+		for _, srv := range ck.servers {
+			ok := srv.Call("ShardCtrler.Request", &args, &reply)
+			if ok && reply.Err == OK {
+				return reply.Config
+			}
 		}
 	}
 

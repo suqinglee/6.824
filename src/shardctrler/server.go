@@ -32,6 +32,7 @@ type Op struct {
 	Shard   int
 	Num     int
 	Servers map[int][]string
+	Config  Config
 }
 
 func (sc *ShardCtrler) GetConfig() Config {
@@ -119,6 +120,7 @@ func (sc *ShardCtrler) Request(args *Args, reply *Reply) {
 			sc.mu.Lock()
 			reply.Config = sc.configs[op.Num]
 			sc.mu.Unlock()
+			// reply.Config = op.Config
 		}
 	case <-time.After(1 * time.Second):
 		reply.Err = ErrRetry
@@ -151,10 +153,16 @@ func (sc *ShardCtrler) Update() {
 			case Move:
 				sc.Move(op.Shard, op.GIDs[0])
 				sc.Balance()
+			// case Query:
+			// 	op.Config = sc.configs[op.Num]
 			}
 		}
 		if _, ok := sc.recv[index]; ok {
-			sc.recv[index] <- op
+			// sc.recv[index] <- op
+			select {
+			case sc.recv[index] <- op:
+			case <-time.After(1 * time.Second):
+			}
 		}
 		sc.mu.Unlock()
 	}

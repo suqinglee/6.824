@@ -80,10 +80,12 @@ func (ck *Clerk) Append(key string, value string) {
 func (ck *Clerk) Request(args Args) string {
 	args.Cid = ck.cid
 	args.Seq = atomic.AddInt64(&ck.seq, 1)
+	// DPrintf("Request %v", args)
 
 	for {
 		shard := key2shard(args.Key)
 		gid := ck.config.Shards[shard]
+		args.Num = ck.config.Num
 		if servers, ok := ck.config.Groups[gid]; ok {
 			for i := 0; i < len(servers); i++ {
 				srv := ck.make_end(servers[i])
@@ -96,7 +98,7 @@ func (ck *Clerk) Request(args Args) string {
 				}
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 		ck.config = ck.sm.Query(-1)
 	}
 }

@@ -1,6 +1,7 @@
 package shardkv
 
 import (
+	// "github.com/sasha-s/go-deadlock"
 	"sync"
 	"time"
 
@@ -34,6 +35,9 @@ type ShardKV struct {
 
 func (kv *ShardKV) Request(args *Args, reply *Reply) {
 	// if !kv.rightShard(args.Key) {
+	// 	kv.mu.Lock()
+	// 	DPrintf("%v num %v cid %v seq %v key %v shard %v hold %v need %v config %v", kv.gid, args.Num, args.Cid, args.Seq, args.Key, key2shard(args.Key), kv.hold, kv.need, kv.config)
+	// 	kv.mu.Unlock()
 	// 	reply.Err = ErrWrongGroup
 	// 	return
 	// }
@@ -69,22 +73,33 @@ func (kv *ShardKV) Update() {
 func (kv *ShardKV) PullConfig() {
 	for {
 		time.Sleep(100 * time.Millisecond)
-		if _, isLeader := kv.rf.GetState(); !isLeader || kv.needShard() {
+		_, isLeader := kv.rf.GetState()
+		kv.mu.Lock()
+		if !isLeader || len(kv.need) > 0{
+			kv.mu.Unlock()
 			continue
+			// return
 		}
-		if config, changed := kv.checkConfig(); changed {
+		next := kv.config.Num + 1
+		kv.mu.Unlock()
+		// 不能加锁，会死锁
+		config := kv.clerk.sm.Query(next)
+		if config.Num == next {
 			kv.rf.Start(config)
 		}
 	}
 }
 
 func (kv *ShardKV) Migrate(args *MigrateArgs, reply *MigrateReply) {
+	// DPrintf("%v migrate shard %v num %v", kv.gid, args.Shard, args.ConfigNum)
 	if _, isLeader := kv.rf.GetState(); !isLeader {
 		reply.Err = ErrWrongLeader
 		return
 	}
+	// DPrintf("%v me %v leader migrate shard %v num %v", kv.gid, kv.me, args.Shard, args.ConfigNum)
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
+	// DPrintf("%v migrate shard %v num %v, self num %v", kv.gid, args.Shard, args.ConfigNum, kv.config.Num)
 	if args.ConfigNum >= kv.config.Num {
 		reply.Err = ErrRetry
 		return
@@ -96,16 +111,23 @@ func (kv *ShardKV) Migrate(args *MigrateArgs, reply *MigrateReply) {
 func (kv *ShardKV) PullShard() {
 	for {
 		time.Sleep(100 * time.Millisecond)
-		if _, isLeader := kv.rf.GetState(); !isLeader || !kv.needShard() {
+		_, isLeader := kv.rf.GetState()
+		kv.mu.Lock()
+		if !isLeader || len(kv.need) == 0 {
+			kv.mu.Unlock()
 			continue
+			// return
 		}
 		var wg sync.WaitGroup
-		kv.mu.Lock()
+		// DPrintf("%v pull shard", kv.gid)
 		for shard, configNum := range kv.need {
+			// DPrintf("%v pull shard %v num %v", kv.gid, shard, configNum)
+			wg.Add(1)
 			go func(shard int, config shardctrler.Config) {
 				defer wg.Done()
 				args := MigrateArgs{Shard: shard, ConfigNum: config.Num}
 				gid := config.Shards[shard]
+				// DPrintf("%v pull shard %v num %v from %v", kv.gid, shard, config.Num, gid)
 				for _, server := range config.Groups[gid] {
 					srv := kv.make_end(server)
 					reply := MigrateReply{}
@@ -119,8 +141,8 @@ func (kv *ShardKV) PullShard() {
 						})
 					}
 				}
+				// DPrintf("%v get shard %v num %v", kv.gid, shard, config.Num)
 			}(shard, kv.clerk.sm.Query(configNum))
-			wg.Add(1)
 		}
 		kv.mu.Unlock()
 		wg.Wait()
