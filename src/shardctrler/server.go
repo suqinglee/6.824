@@ -4,6 +4,7 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"sync/atomic"
 
 	"6.824/labgob"
 	"6.824/labrpc"
@@ -15,6 +16,7 @@ type ShardCtrler struct {
 	me      int
 	rf      *raft.Raft
 	applyCh chan raft.ApplyMsg
+	dead    int32
 
 	// Your data here.
 
@@ -133,7 +135,7 @@ func (sc *ShardCtrler) Request(args *Args, reply *Reply) {
 }
 
 func (sc *ShardCtrler) Update() {
-	for {
+	for !sc.killed() {
 		msg := <-sc.applyCh
 		if !msg.CommandValid {
 			continue
@@ -233,8 +235,14 @@ func (sc *ShardCtrler) Balance() {
 }
 
 func (sc *ShardCtrler) Kill() {
+	atomic.StoreInt32(&sc.dead, 1)
 	sc.rf.Kill()
 	// Your code here, if desired.
+}
+
+func (sc *ShardCtrler) killed() bool {
+	z := atomic.LoadInt32(&sc.dead)
+	return z == 1
 }
 
 // needed by shardkv tester

@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"6.824/labrpc"
 )
@@ -83,6 +84,7 @@ func (ck *Clerk) Request(servers map[int][]string, num int, gids []int, shard in
 				return reply.Config
 			}
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	return reply.Config

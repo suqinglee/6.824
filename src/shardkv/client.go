@@ -85,7 +85,6 @@ func (ck *Clerk) Request(args Args) string {
 	for {
 		shard := key2shard(args.Key)
 		gid := ck.config.Shards[shard]
-		args.Num = ck.config.Num
 		if servers, ok := ck.config.Groups[gid]; ok {
 			for i := 0; i < len(servers); i++ {
 				srv := ck.make_end(servers[i])
@@ -98,7 +97,7 @@ func (ck *Clerk) Request(args Args) string {
 				}
 			}
 		}
-		time.Sleep(1000 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		ck.config = ck.sm.Query(-1)
 	}
 }

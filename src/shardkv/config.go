@@ -80,9 +80,16 @@ func (cfg *config) cleanup() {
 	for gi := 0; gi < cfg.ngroups; gi++ {
 		cfg.ShutdownGroup(gi)
 	}
-	for i := 0; i < cfg.nctrlers; i++ {
-		cfg.ctrlerservers[i].Kill()
+	// for i := 0; i < cfg.nctrlers; i++ {
+	// 	cfg.ctrlerservers[i].Kill()
+	// }
+	cfg.mu.Lock()
+	for i := 0; i < len(cfg.ctrlerservers); i++ {
+		if cfg.ctrlerservers[i] != nil {
+			cfg.ctrlerservers[i].Kill()
+		}
 	}
+	cfg.mu.Unlock()
 	cfg.net.Cleanup()
 	cfg.checkTimeout()
 }

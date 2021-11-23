@@ -189,7 +189,7 @@ func (rf *Raft) heartbeat() {
 					rf.nextIndex[id] = reply.ConflictIndex
 				} else {
 					conflictIndex := -1
-					for i := args.PrevLogIndex; i > rf.log.Base; i-- { // not i > 0
+					for i := args.PrevLogIndex; i < rf.log.size() && i > rf.log.Base; i-- { // not i > 0
 						if rf.log.get(i).Term == reply.ConflictTerm {
 							conflictIndex = i
 							break

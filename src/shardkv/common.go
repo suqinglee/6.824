@@ -19,6 +19,7 @@ const (
 	GET     = "Get"
 	APPEND  = "Append"
 	MOVE    = "Move"
+	GC      = "GC"
 )
 
 const Debug = true
@@ -36,12 +37,20 @@ type Args struct {
 	Act   string
 	Cid   int64
 	Seq   int64
-	Num   int
 }
 
 type Reply struct {
 	Err   string
 	Value string
+}
+
+type GCArgs struct {
+	Shard int
+	ConfigNum int
+}
+
+type GCReply struct {
+	Err string
 }
 
 type MigrateArgs struct {
@@ -79,19 +88,6 @@ func (kv *ShardKV) rightShard(key string) bool {
 	return kv.config.Shards[key2shard(key)] == kv.gid
 }
 
-// func (kv *ShardKV) checkConfig() (shardctrler.Config, bool) {
-// 	kv.mu.Lock()
-// 	defer kv.mu.Unlock()
-// 	config := kv.clerk.sm.Query(kv.config.Num + 1)
-// 	return config, config.Num != kv.config.Num
-// }
-
-// func (kv *ShardKV) needShard() bool {
-// 	kv.mu.Lock()
-// 	defer kv.mu.Unlock()
-// 	return len(kv.need) > 0
-// }
-
 func (kv *ShardKV) PutHandler(op Args) {
 	if op.Seq > kv.mseq[op.Cid] {
 		kv.mseq[op.Cid] = op.Seq
@@ -108,21 +104,6 @@ func (kv *ShardKV) AppendHandler(op Args) {
 
 func (kv *ShardKV) GetHandler(op Args) string {
 	return kv.data[key2shard(op.Key)][op.Key]
-}
-
-func (kv *ShardKV) SnapshotHandler(snapshot []byte, index int, term int) {
-	if len(snapshot) > 0 && kv.rf.CondInstallSnapshot(term, index, snapshot) {
-		r := bytes.NewBuffer(snapshot)
-		d := labgob.NewDecoder(r)
-		kv.mu.Lock()
-		d.Decode(&kv.data)
-		d.Decode(&kv.mseq)
-		d.Decode(&kv.need)
-		d.Decode(&kv.send)
-		d.Decode(&kv.hold)
-		d.Decode(&kv.config)
-		kv.mu.Unlock()
-	}
 }
 
 func (kv *ShardKV) CommandHandler(op Args, index int) {
@@ -144,7 +125,28 @@ func (kv *ShardKV) CommandHandler(op Args, index int) {
 	if _, ok := kv.wait[index]; ok {
 		select {
 		case kv.wait[index] <- op:
-		case <-time.After(1 * time.Second):
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
+func (kv *ShardKV) GCHandler(args GCArgs, index int) {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+	if _, ok := kv.send[args.ConfigNum]; ok {
+		delete(kv.send[args.ConfigNum], args.Shard)
+		if len(kv.send[args.ConfigNum]) == 0 {
+			delete(kv.send, args.ConfigNum)
+		}
+	}
+	if _, ok := kv.wait[index]; ok {
+		select {
+		case kv.wait[index] <- Args{
+			Act: GC,
+			Cid: 0,
+			Seq: 0,
+		}:
+		case <-time.After(2 * time.Second):
 		}
 	}
 }
@@ -198,6 +200,26 @@ func (kv *ShardKV) MigrateHandler(data MigrateData) {
 				kv.mseq[k] = v
 			}
 		}
+		if _, ok := kv.garbages[data.ConfigNum]; !ok {
+			kv.garbages[data.ConfigNum] = make(map[int]bool)
+		}
+		kv.garbages[data.ConfigNum][data.Shard] = true
+	}
+}
+
+func (kv *ShardKV) SnapshotHandler(snapshot []byte, index int, term int) {
+	if len(snapshot) > 0 && kv.rf.CondInstallSnapshot(term, index, snapshot) {
+		r := bytes.NewBuffer(snapshot)
+		d := labgob.NewDecoder(r)
+		kv.mu.Lock()
+		d.Decode(&kv.data)
+		d.Decode(&kv.mseq)
+		d.Decode(&kv.need)
+		d.Decode(&kv.send)
+		d.Decode(&kv.hold)
+		d.Decode(&kv.config)
+		d.Decode(&kv.garbages)
+		kv.mu.Unlock()
 	}
 }
 
@@ -212,6 +234,7 @@ func (kv *ShardKV) Compaction(index int) {
 		e.Encode(kv.send)
 		e.Encode(kv.hold)
 		e.Encode(kv.config)
+		e.Encode(kv.garbages)
 		kv.rf.Snapshot(index, w.Bytes())
 		kv.mu.Unlock()
 	}
@@ -235,7 +258,7 @@ func (kv *ShardKV) Receive(index int, cid int64, seq int64) (err string, value s
 				value = op.Value
 			}
 		}
-	case <-time.After(1 * time.Second):
+	case <-time.After(2 * time.Second):
 		err = ErrRetry
 	}
 
