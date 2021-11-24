@@ -97,7 +97,7 @@ func (ck *Clerk) Request(args Args) string {
 				}
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 		ck.config = ck.sm.Query(-1)
 	}
 }
