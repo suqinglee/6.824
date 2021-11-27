@@ -178,9 +178,11 @@ func (kv *ShardKV) PullShard() {
 		// time.Sleep(30 * time.Millisecond)
 
 		for shard, configNum := range kv.need {
+			// begin:
 			config := kv.clerk.sm.Query(configNum)
 			args := MigrateArgs{Shard: shard, ConfigNum: config.Num}
 			gid := config.Shards[shard]
+			// success := false
 			for _, server := range config.Groups[gid] {
 				srv := kv.make_end(server)
 				reply := MigrateReply{}
@@ -193,9 +195,14 @@ func (kv *ShardKV) PullShard() {
 						Data: reply.Data,
 						Mseq: reply.Mseq,
 					})
+					// success = true
 				}
 				kv.myLock()
 			}
+			// if !success {
+			// 	fmt.Printf("??? shard %v confignum %v\n", shard, configNum)
+			// 	goto begin
+			// }
 		}
 		kv.myUnlock("PullShard")
 		time.Sleep(30 * time.Millisecond)

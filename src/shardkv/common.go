@@ -6,7 +6,7 @@ import (
 	"time"
 	"6.824/labgob"
 	"6.824/shardctrler"
-	"fmt"
+	// "fmt"
 )	
 
 const (
@@ -78,9 +78,9 @@ func (kv *ShardKV) myLock() {
 }
 
 func (kv *ShardKV) myUnlock(name string) {
-	if time.Since(kv.s) > time.Duration(1*time.Second) {
-		fmt.Printf("%v time out %v\n", name, time.Since(kv.s))
-	}
+	// if time.Since(kv.s) > time.Duration(1*time.Second) {
+	// 	fmt.Printf("%v time out %v\n", name, time.Since(kv.s))
+	// }
 	kv.mu.Unlock()
 }
 
